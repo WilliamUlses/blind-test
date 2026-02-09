@@ -119,7 +119,7 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
  * Démarre le serveur
  */
 function startServer() {
-  httpServer.listen(PORT, () => {
+  httpServer.listen(Number(PORT), '0.0.0.0', () => {
     console.log('');
     console.log('🎵 =================================== 🎵');
     console.log('🎧  Blind Test Server is running!  🎧');
