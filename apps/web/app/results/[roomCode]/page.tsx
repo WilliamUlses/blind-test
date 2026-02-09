@@ -81,7 +81,7 @@ export default function ResultsPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-12 text-center"
         >
-          <h1 className="font-display text-6xl font-black mb-3 tracking-tighter">
+          <h1 className="font-display text-4xl md:text-6xl font-black mb-3 tracking-tighter">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
               Résultats
             </span>
@@ -99,13 +99,13 @@ export default function ResultsPage() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ delay: index * 0.15, type: 'spring', stiffness: 200 }}
-              className={`relative bg-gradient-to-r ${MEDAL_COLORS[index]} border rounded-2xl p-6 backdrop-blur-sm`}
+              className={`relative bg-gradient-to-r ${MEDAL_COLORS[index]} border rounded-2xl p-4 md:p-6 backdrop-blur-sm`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="text-5xl">{MEDAL_EMOJIS[index]}</div>
+                  <div className="text-3xl md:text-5xl">{MEDAL_EMOJIS[index]}</div>
                   <div>
-                    <p className="text-white font-display text-2xl font-bold">
+                    <p className="text-white font-display text-lg md:text-2xl font-bold">
                       {player.pseudo}
                     </p>
                     {player.streak > 0 && (
@@ -117,7 +117,7 @@ export default function ResultsPage() {
                 </div>
 
                 <div className="text-right">
-                  <p className={`font-display text-3xl font-black ${
+                  <p className={`font-display text-2xl md:text-3xl font-black ${
                     index === 0 ? 'text-yellow-400' : index === 1 ? 'text-gray-300' : 'text-amber-600'
                   }`}>
                     {player.score.toLocaleString()}

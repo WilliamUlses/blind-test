@@ -97,3 +97,5 @@ assets/
 .agents/
 .claude/
 CLAUDE.md
+.vercel
+.env*.local

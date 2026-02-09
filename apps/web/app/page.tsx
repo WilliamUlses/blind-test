@@ -80,7 +80,7 @@ export default function HomePage() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="mb-16 text-center"
         >
-          <h1 className="font-display text-8xl font-black mb-6 tracking-tighter leading-none">
+          <h1 className="font-display text-5xl md:text-8xl font-black mb-6 tracking-tighter leading-none">
             <span className="text-white">BLIND</span>
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">TEST</span>
@@ -170,7 +170,7 @@ export default function HomePage() {
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                   placeholder="X Y Z 1"
-                  className="w-full px-6 py-5 bg-white/5 border border-white/10 rounded-2xl text-white text-center text-3xl font-black placeholder:text-white/20 focus:outline-none focus:bg-white/10 focus:border-secondary/50 transition-all tracking-[0.5em] uppercase"
+                  className="w-full px-6 py-5 bg-white/5 border border-white/10 rounded-2xl text-white text-center text-xl md:text-3xl font-black placeholder:text-white/20 focus:outline-none focus:bg-white/10 focus:border-secondary/50 transition-all tracking-[0.3em] md:tracking-[0.5em] uppercase"
                   maxLength={7}
                   disabled={isLoading}
                 />

@@ -10,7 +10,7 @@ interface EmoteBarProps {
 
 export function EmoteBar({ onEmote, disabled = false }: EmoteBarProps) {
   return (
-    <div className="flex items-center justify-center gap-1.5 py-2">
+    <div className="flex flex-wrap items-center justify-center gap-1 md:gap-1.5 py-2">
       {GAME_CONSTANTS.VALID_EMOTES.map((emote) => (
         <motion.button
           key={emote}
@@ -18,7 +18,7 @@ export function EmoteBar({ onEmote, disabled = false }: EmoteBarProps) {
           whileTap={{ scale: 0.85 }}
           whileHover={{ scale: 1.15 }}
           disabled={disabled}
-          className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-base md:text-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label={`Send ${emote} reaction`}
         >
           {emote}

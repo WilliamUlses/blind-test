@@ -71,7 +71,7 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRound?.previewUrl, currentRound?.startTimestamp, gamePhase]);
 
-  const { togglePause, sendEmote } = useGameActions();
+  const { togglePause, sendEmote, leaveRoom } = useGameActions();
   const emotes = useGameStore((state) => state.emotes);
 
   // Rediriger si la partie est terminée
@@ -165,11 +165,11 @@ export default function GamePage() {
 
       <div className="flex-1 p-4 lg:p-8 z-10 flex flex-col max-w-7xl mx-auto w-full">
         {/* Header (Timer & Round Info) */}
-        <header className="flex justify-between items-center mb-8 relative">
+        <header className="flex justify-between items-center mb-4 md:mb-8 relative">
           {/* Room Code */}
-          <div className="glass-panel px-6 py-3 rounded-full flex items-center gap-4">
-            <span className="text-white/60 text-xs font-bold uppercase tracking-widest">Room</span>
-            <span className="text-white font-black text-lg tracking-wider">{roomCode}</span>
+          <div className="glass-panel px-3 py-2 md:px-6 md:py-3 rounded-full flex items-center gap-2 md:gap-4">
+            <span className="text-white/60 text-[10px] md:text-xs font-bold uppercase tracking-widest">Room</span>
+            <span className="text-white font-black text-sm md:text-lg tracking-wider">{roomCode}</span>
           </div>
 
           {/* Timer Centered */}
@@ -180,7 +180,7 @@ export default function GamePage() {
           )}
 
           {/* Right Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3">
             {/* Connection Indicator */}
             <div
               role="status"
@@ -193,12 +193,12 @@ export default function GamePage() {
               title={isConnected ? 'Connected' : isConnecting ? 'Reconnecting...' : 'Disconnected'}
             />
 
-            {/* Round Info */}
-            <div className="glass-panel px-6 py-3 rounded-full flex items-center gap-4 hidden md:flex">
-              <span className="text-white/60 text-xs font-bold uppercase tracking-widest">Round</span>
+            {/* Round Info — compact on mobile, full on desktop */}
+            <div className="glass-panel px-3 py-2 md:px-6 md:py-3 rounded-full flex items-center gap-2 md:gap-4">
+              <span className="text-white/60 text-[10px] md:text-xs font-bold uppercase tracking-widest hidden md:inline">Round</span>
               <div className="flex items-baseline gap-1">
-                <span className="text-primary font-black text-xl">{currentRound?.roundNumber || '-'}</span>
-                <span className="text-white/40 font-bold text-sm">/ {roomState.settings.totalRounds}</span>
+                <span className="text-primary font-black text-sm md:text-xl">{currentRound?.roundNumber || '-'}</span>
+                <span className="text-white/40 font-bold text-[10px] md:text-sm">/ {roomState.settings.totalRounds}</span>
               </div>
             </div>
 
@@ -208,7 +208,7 @@ export default function GamePage() {
                 onClick={toggleMute}
                 onContextMenu={(e) => { e.preventDefault(); setShowVolume(!showVolume); }}
                 onMouseEnter={() => setShowVolume(true)}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all ${
                   audioPlayer.volume === 0
                     ? 'bg-white/5 text-white/40'
                     : 'bg-white/10 text-white hover:bg-white/20'
@@ -260,7 +260,7 @@ export default function GamePage() {
             {gamePhase === 'PLAYING' && (
               <button
                 onClick={() => togglePause()}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${roomState.players.find(p => p.id === useGameStore.getState().localPlayer?.id)?.hasVotedToPause
+                className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all text-xs md:text-base ${roomState.players.find(p => p.id === useGameStore.getState().localPlayer?.id)?.hasVotedToPause
                     ? 'bg-yellow-500 text-black hover:bg-yellow-400'
                     : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
@@ -273,8 +273,8 @@ export default function GamePage() {
 
             {/* Leave Button */}
             <button
-              onClick={() => router.push('/')}
-              className="w-10 h-10 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all"
+              onClick={() => { leaveRoom(); router.push('/'); }}
+              className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all text-xs md:text-base"
               aria-label="Leave game"
               title="Leave Game"
             >
@@ -283,12 +283,12 @@ export default function GamePage() {
           </div>
         </header>
 
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-8 items-center">
           {/* Main Game Area */}
-          <div className="lg:col-span-8 flex flex-col items-center justify-center space-y-12">
+          <div className="lg:col-span-8 flex flex-col items-center justify-center space-y-6 md:space-y-12">
 
             {/* Visualizer / Player */}
-            <div className="w-full max-w-lg aspect-square flex items-center justify-center relative">
+            <div className="w-full max-w-[250px] md:max-w-lg aspect-square flex items-center justify-center relative mx-auto">
               <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full blur-3xl animate-pulse-slow" />
               <MusicPlayer isPlaying={audioPlayer.isPlaying} />
             </div>
@@ -311,7 +311,7 @@ export default function GamePage() {
           </div>
 
           {/* Sidebar Scoreboard */}
-          <div className="lg:col-span-4 h-full max-h-[600px] glass-panel rounded-3xl p-6 overflow-hidden flex flex-col">
+          <div className="lg:col-span-4 h-full max-h-[300px] lg:max-h-[600px] glass-panel rounded-3xl p-4 md:p-6 overflow-hidden flex flex-col">
             <h3 className="text-white/60 text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2">
               Leaderboard
               <span className="flex-1 h-px bg-white/10"></span>

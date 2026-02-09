@@ -131,7 +131,7 @@ export default function LobbyPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col md:flex-row items-center justify-between mb-12 glass-panel p-6 rounded-3xl"
+          className="flex flex-col md:flex-row items-center justify-between mb-8 md:mb-12 glass-panel p-4 md:p-6 rounded-3xl"
         >
           <div>
             <p className="text-white/40 text-xs font-bold uppercase tracking-widest mb-1">Room Code</p>
@@ -139,7 +139,7 @@ export default function LobbyPage() {
               onClick={copyCode}
               className="flex items-center gap-3 cursor-pointer group"
             >
-              <h1 className="font-display text-6xl font-black tracking-wider text-white group-hover:text-primary transition-colors">
+              <h1 className="font-display text-3xl md:text-6xl font-black tracking-wider text-white group-hover:text-primary transition-colors">
                 {roomCode}
               </h1>
               <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/10 p-2 rounded-lg">
