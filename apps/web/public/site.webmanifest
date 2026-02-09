@@ -1,0 +1,16 @@
+{
+  "name": "Blind Test Musical",
+  "short_name": "Blind Test",
+  "description": "Quiz musique multijoueur en temps réel",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#A855F7",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
