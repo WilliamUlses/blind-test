@@ -39,20 +39,6 @@ export function getSocket(): TypedSocket {
       timeout: 10000,
     });
 
-    // Logger les événements de connexion en dev
-    if (process.env.NODE_ENV === 'development') {
-      socketInstance.on('connect', () => {
-        console.log('✓ Socket connected:', socketInstance?.id);
-      });
-
-      socketInstance.on('disconnect', (reason) => {
-        console.log('✗ Socket disconnected:', reason);
-      });
-
-      socketInstance.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-      });
-    }
   }
 
   return socketInstance;

@@ -15,42 +15,43 @@ import type { GameSettings } from '../../../packages/shared/types';
 export function useGameSocket() {
   // On utilise le store pour l'état réactif
   const isConnected = useGameStore((state) => state.isConnected);
+  const setError = useGameStore((state) => state.setError);
 
   // Instance socket (singleton)
   const socket = getSocket();
+
+  /**
+   * Helper : vérifie la connexion et notifie l'utilisateur si le socket est indisponible
+   */
+  const ensureConnected = useCallback((): boolean => {
+    if (!socket) {
+      setError({ code: 'CONNECTION_ERROR', message: 'Connexion au serveur non initialisée' });
+      return false;
+    }
+    if (!socket.connected) {
+      socket.connect();
+    }
+    return true;
+  }, [socket, setError]);
 
   // === ACTIONS (fonctions helper pour émettre des événements) ===
 
   const createRoom = useCallback(
     (pseudo: string, avatarUrl?: string, settings?: Partial<GameSettings>) => {
-      if (!socket) {
-        console.error('❌ Socket non initialisé');
-        return;
-      }
-
-      console.log('📤 Émission create_room:', pseudo);
-      // On connecte manuellement si besoin (cas edge)
-      if (!socket.connected) socket.connect();
+      if (!ensureConnected()) return;
       socket.emit('create_room', { pseudo, avatarUrl, settings });
     },
-    [socket]
+    [socket, ensureConnected]
   );
 
   const joinRoom = useCallback((roomCode: string, pseudo: string, avatarUrl?: string) => {
-    if (!socket) {
-      console.error('❌ Socket non initialisé');
-      return;
-    }
-
-    console.log('📤 Émission join_room:', roomCode, pseudo);
-    if (!socket.connected) socket.connect();
+    if (!ensureConnected()) return;
     socket.emit('join_room', { roomCode, pseudo, avatarUrl });
-  }, [socket]);
+  }, [socket, ensureConnected]);
 
   const leaveRoom = useCallback(() => {
     if (!socket) return;
     socket.emit('leave_room');
-    // Le reset est géré par les listeners ou le composant
   }, [socket]);
 
   const kickPlayer = useCallback((playerId: string) => {
@@ -70,7 +71,6 @@ export function useGameSocket() {
 
   const startGame = useCallback(() => {
     if (!socket) return;
-    console.log('📤 Émission start_game');
     socket.emit('start_game');
   }, [socket]);
 

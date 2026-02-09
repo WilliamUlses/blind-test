@@ -11,7 +11,6 @@ export function useGameActions() {
     const createRoom = useCallback(
         (pseudo: string, avatarUrl?: string, settings?: Partial<GameSettings>) => {
             const socket = getSocket();
-            console.log('📤 Émission create_room:', pseudo);
             socket.emit('create_room', { pseudo, avatarUrl, settings });
         },
         []
@@ -19,7 +18,6 @@ export function useGameActions() {
 
     const joinRoom = useCallback((roomCode: string, pseudo: string, avatarUrl?: string) => {
         const socket = getSocket();
-        console.log('📤 Émission join_room:', roomCode, pseudo);
         socket.emit('join_room', { roomCode, pseudo, avatarUrl });
     }, []);
 
@@ -46,7 +44,6 @@ export function useGameActions() {
 
     const startGame = useCallback(() => {
         const socket = getSocket();
-        console.log('📤 Émission start_game');
         socket.emit('start_game');
     }, []);
 

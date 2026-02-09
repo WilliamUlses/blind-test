@@ -1,8 +1,6 @@
 'use client';
 
-// Force rebuild 2
-
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { getSocket } from '../lib/socket';
 import { useGameStore } from '../stores/gameStore';
 import type { RoundData, RoundResult } from '../../../packages/shared/types';
@@ -29,40 +27,34 @@ export function useSocketListeners() {
     useEffect(() => {
         // Connexion initiale si nécessaire
         if (!socket.connected) {
-            console.log('🔌 Connexion au serveur Socket.io...');
             setConnectionStatus(false, true);
             socket.connect();
         }
 
         // Handlers
         const onConnect = () => {
-            console.log('✅ Connecté au serveur:', socket.id);
             setConnectionStatus(true, false);
             setError(null);
         };
 
         const onDisconnect = (reason: string) => {
-            console.log('❌ Déconnecté:', reason);
             setConnectionStatus(false, false);
             if (reason === 'io server disconnect' || reason === 'transport close') {
                 setError({ code: 'DISCONNECTED', message: 'Connexion perdue' });
             }
         };
 
-        const onConnectError = (error: Error) => {
-            console.error('❌ Erreur de connexion:', error);
+        const onConnectError = (_error: Error) => {
             setConnectionStatus(false, false);
             setError({ code: 'CONNECTION_ERROR', message: 'Impossible de se connecter' });
         };
 
-        const onRoomCreated = ({ roomCode, roomState }: any) => {
-            console.log('✅ Room créée:', roomCode);
+        const onRoomCreated = ({ roomState }: any) => {
             setRoomState(roomState);
             if (socket.id) setLocalPlayerId(socket.id, roomState.players[0].pseudo);
         };
 
         const onRoomJoined = ({ roomState }: any) => {
-            console.log('✅ Room rejointe:', roomState.code);
             setRoomState(roomState);
             const currentPlayer = roomState.players.find((p: any) => p.id === socket.id);
             if (currentPlayer && socket.id) {
@@ -82,12 +74,14 @@ export function useSocketListeners() {
         };
 
         const onRoundStart = (roundData: RoundData) => {
-            console.log('🎵 Round démarré:', roundData.roundNumber);
             setCurrentRound(roundData);
             clearPlayerCooldown();
         };
 
         const onAnswerResult = ({ correct, cooldownUntil, foundPart }: any) => {
+            // Mark the last attempt with the server result
+            useGameStore.getState().markLastAttemptResult(correct, foundPart);
+
             if (correct) {
                 clearPlayerCooldown();
                 if (foundPart) {
@@ -99,7 +93,6 @@ export function useSocketListeners() {
         };
 
         const onRoundEnd = (result: RoundResult) => {
-            console.log('🏁 Round terminé');
             setLastRoundResult(result);
         };
 
@@ -108,7 +101,6 @@ export function useSocketListeners() {
         };
 
         const onError = ({ code, message }: any) => {
-            console.error('❌ Erreur serveur:', code, message);
             setError({ code, message });
         };
 

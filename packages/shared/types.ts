@@ -51,6 +51,7 @@ export interface GameSettings {
   acceptArtistOnly: boolean;  // Accepter juste l'artiste comme réponse valide
   acceptTitleOnly: boolean;   // Accepter juste le titre comme réponse valide
   wrongAnswerCooldownMs: number; // Cooldown après une mauvaise réponse (default: 2000)
+  difficulty?: 'easy' | 'medium' | 'hard'; // Preset (cosmetic, actual values in other fields)
 }
 
 /**

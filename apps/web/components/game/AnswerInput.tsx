@@ -26,10 +26,13 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
   const localPlayer = useGameStore((state) => state.localPlayer);
   const currentPlayer = useGameStore((state) => state.getCurrentPlayer());
   const gamePhase = useGameStore((state) => state.getPhase());
+  const addAnswerAttempt = useGameStore((state) => state.addAnswerAttempt);
 
+  const roomState = useGameStore((state) => state.roomState);
   const isInCooldown = localPlayer.isInCooldown;
   const cooldownEndsAt = localPlayer.cooldownEndsAt;
   const hasSubmittedCorrect = currentPlayer?.hasAnsweredCorrectly || false;
+  const cooldownDurationMs = roomState?.settings.wrongAnswerCooldownMs ?? 2000;
 
   /**
    * Gère le cooldown visuel avec progress bar
@@ -43,7 +46,7 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
     const updateCooldown = () => {
       const now = Date.now();
       const remaining = cooldownEndsAt - now;
-      const total = 2000; // 2 secondes
+      const total = cooldownDurationMs;
 
       if (remaining <= 0) {
         setCooldownProgress(0);
@@ -73,7 +76,8 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
       return;
     }
 
-    // Soumettre au serveur
+    // Enregistrer la tentative localement puis soumettre au serveur
+    addAnswerAttempt(answer.trim());
     submitAnswer(answer.trim());
 
     // Vider l'input (le joueur peut réessayer après le cooldown)
@@ -85,13 +89,30 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
     }, 100);
   };
 
-  /**
-   * Écoute les résultats pour les animations
-   */
+  // Déclencher le feedback "incorrect" quand le cooldown s'active
+  const prevCooldownRef = useRef(isInCooldown);
   useEffect(() => {
-    // Cette logique pourrait être améliorée avec un event bus
-    // Pour l'instant, on utilise le feedbackState
-  }, []);
+    if (isInCooldown && !prevCooldownRef.current) {
+      setFeedbackState('incorrect');
+      const timer = setTimeout(() => setFeedbackState('idle'), 600);
+      return () => clearTimeout(timer);
+    }
+    prevCooldownRef.current = isInCooldown;
+  }, [isInCooldown]);
+
+  // Déclencher le feedback "correct" quand une partie est trouvée
+  const prevFoundRef = useRef({ artist: localPlayer.foundArtist, title: localPlayer.foundTitle });
+  useEffect(() => {
+    const newArtist = localPlayer.foundArtist && !prevFoundRef.current.artist;
+    const newTitle = localPlayer.foundTitle && !prevFoundRef.current.title;
+    if (newArtist || newTitle) {
+      setFeedbackState('correct');
+      const timer = setTimeout(() => setFeedbackState('idle'), 1000);
+      prevFoundRef.current = { artist: localPlayer.foundArtist, title: localPlayer.foundTitle };
+      return () => clearTimeout(timer);
+    }
+    prevFoundRef.current = { artist: localPlayer.foundArtist, title: localPlayer.foundTitle };
+  }, [localPlayer.foundArtist, localPlayer.foundTitle]);
 
   /**
    * Détermine si l'input est désactivé
@@ -157,6 +178,7 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
           <AnimatePresence>
             {localPlayer.foundArtist && (
               <motion.div
+                key="artist-found"
                 initial={{ opacity: 0, y: 10, scale: 0.8 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
@@ -167,6 +189,7 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
             )}
             {localPlayer.foundTitle && (
               <motion.div
+                key="title-found"
                 initial={{ opacity: 0, y: 10, scale: 0.8 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
@@ -251,6 +274,7 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
           key={getHelperText()}
           initial={{ opacity: 0, y: -5 }}
           animate={{ opacity: 1, y: 0 }}
+          aria-live="polite"
           className={`
             mt-2 text-sm text-center
             ${hasSubmittedCorrect ? 'text-green-400' : ''}
@@ -265,16 +289,28 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
         <button type="submit" className="hidden" aria-label="Submit answer" />
       </form>
 
-      {/* Indicateur de tentatives multiples */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="mt-4 text-center text-xs text-gray-500"
-      >
-        {!hasSubmittedCorrect && gamePhase === 'PLAYING' && (
-          <p>💡 Tu peux réessayer autant de fois que tu veux (cooldown de 2s après chaque erreur)</p>
-        )}
-      </motion.div>
+      {/* Historique des tentatives */}
+      {localPlayer.answerHistory.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5 justify-center max-h-20 overflow-y-auto">
+          {localPlayer.answerHistory.map((attempt, i) => (
+            <span
+              key={i}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${
+                attempt.correct
+                  ? attempt.foundPart === 'artist'
+                    ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                    : attempt.foundPart === 'title'
+                    ? 'bg-green-500/15 text-green-400 border border-green-500/30'
+                    : 'bg-green-500/15 text-green-400 border border-green-500/30'
+                  : 'bg-red-500/10 text-red-400/70 border border-red-500/20'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${attempt.correct ? 'bg-green-400' : 'bg-red-400/70'}`} />
+              {attempt.text}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

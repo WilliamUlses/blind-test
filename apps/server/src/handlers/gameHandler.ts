@@ -5,7 +5,7 @@
 
 import { Socket, Server } from 'socket.io';
 import { GameManager } from '../services/GameManager';
-import { ERROR_MESSAGES, type ErrorCode } from '../../../../packages/shared/types';
+import { ERROR_MESSAGES, GAME_CONSTANTS, type ErrorCode } from '../../../../packages/shared/types';
 import { defaultRateLimiter } from '../middlewares/rateLimiter';
 
 /**
@@ -13,19 +13,6 @@ import { defaultRateLimiter } from '../middlewares/rateLimiter';
  * En production, cela devrait être dans un store plus robuste (Redis, etc.)
  */
 const gameManagers = new Map<string, GameManager>();
-
-/**
- * Récupère ou crée un GameManager pour une room
- */
-export function getOrCreateGameManager(roomCode: string, io: Server, socket: Socket): GameManager | null {
-  // Récupérer le GameManager existant
-  if (gameManagers.has(roomCode)) {
-    return gameManagers.get(roomCode)!;
-  }
-
-  // Si pas de GameManager, la room n'existe pas
-  return null;
-}
 
 /**
  * Crée un nouveau GameManager pour une room
@@ -98,12 +85,12 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
       const { answer, timestamp } = data;
 
       // Validation de base
-      if (!answer || typeof answer !== 'string') {
-        return sendError(socket, 'INVALID_PSEUDO', 'Réponse invalide');
+      if (!answer || typeof answer !== 'string' || !answer.trim()) {
+        return sendError(socket, 'RATE_LIMITED', 'Réponse invalide');
       }
 
-      if (answer.length > 100) {
-        return sendError(socket, 'INVALID_PSEUDO', 'Réponse trop longue');
+      if (answer.length > GAME_CONSTANTS.MAX_ANSWER_LENGTH) {
+        return sendError(socket, 'RATE_LIMITED', 'Réponse trop longue');
       }
 
       const roomCode = getRoomCodeFromSocket(socket);
@@ -144,34 +131,6 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
     }
   });
 
-  /**
-   * Passer au round suivant (host only)
-   * Permet à l'hôte de forcer le passage au round suivant si besoin
-   */
-  socket.on('request_next_round', async () => {
-    try {
-      const roomCode = getRoomCodeFromSocket(socket);
-      if (!roomCode) {
-        return sendError(socket, 'PLAYER_NOT_IN_ROOM');
-      }
-
-      const manager = gameManagers.get(roomCode);
-      if (!manager) {
-        return sendError(socket, 'ROOM_NOT_FOUND');
-      }
-
-      const state = manager.getState();
-      if (socket.data.playerId !== state.hostId) {
-        return sendError(socket, 'NOT_HOST');
-      }
-
-      // Cette fonctionnalité pourrait être implémentée dans le GameManager
-      // Pour l'instant, on ne fait rien (le flow automatique gère déjà tout)
-    } catch (error) {
-      console.error('Error in request_next_round:', error);
-      sendError(socket, 'SERVER_ERROR');
-    }
-  });
 }
 
 /**

@@ -5,10 +5,10 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useGamePhase, useCurrentRound, useRoomState, useGameStore } from '../../../stores/gameStore';
+import { useGamePhase, useCurrentRound, useRoomState, useGameStore, useConnectionStatus } from '../../../stores/gameStore';
 import { useGameActions } from '../../../hooks/useGameActions';
 import { Countdown321 } from '../../../components/game/Countdown321';
 import { MusicPlayer } from '../../../components/game/MusicPlayer';
@@ -47,6 +47,10 @@ export default function GamePage() {
   const roomState = useRoomState();
   const audioPlayer = useSyncedAudioPlayer();
   const serverTimeOffset = useGameStore((state) => state.serverTimeOffset);
+  const { isConnected, isConnecting } = useConnectionStatus();
+  const [showVolume, setShowVolume] = useState(false);
+  const [prevVolume, setPrevVolume] = useState(0.8);
+  const volumeRef = useRef<HTMLDivElement>(null);
 
   // Charger l'audio quand un round démarre
   useEffect(() => {
@@ -73,6 +77,27 @@ export default function GamePage() {
       router.push(`/results/${roomCode}`);
     }
   }, [gamePhase, roomCode, router]);
+
+  // Close volume popover on outside click
+  useEffect(() => {
+    if (!showVolume) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (volumeRef.current && !volumeRef.current.contains(e.target as Node)) {
+        setShowVolume(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showVolume]);
+
+  const toggleMute = () => {
+    if (audioPlayer.volume > 0) {
+      setPrevVolume(audioPlayer.volume);
+      audioPlayer.setVolume(0);
+    } else {
+      audioPlayer.setVolume(prevVolume || 0.8);
+    }
+  };
 
   /* State for manual rejoin */
   const [pseudo, setPseudo] = useState('');
@@ -150,6 +175,18 @@ export default function GamePage() {
 
           {/* Right Controls */}
           <div className="flex items-center gap-3">
+            {/* Connection Indicator */}
+            <div
+              role="status"
+              aria-label={isConnected ? 'Connected' : isConnecting ? 'Reconnecting' : 'Disconnected'}
+              className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                isConnected ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]'
+                : isConnecting ? 'bg-yellow-500 animate-pulse shadow-[0_0_6px_rgba(234,179,8,0.5)]'
+                : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+              }`}
+              title={isConnected ? 'Connected' : isConnecting ? 'Reconnecting...' : 'Disconnected'}
+            />
+
             {/* Round Info */}
             <div className="glass-panel px-6 py-3 rounded-full flex items-center gap-4 hidden md:flex">
               <span className="text-white/60 text-xs font-bold uppercase tracking-widest">Round</span>
@@ -157,6 +194,60 @@ export default function GamePage() {
                 <span className="text-primary font-black text-xl">{currentRound?.roundNumber || '-'}</span>
                 <span className="text-white/40 font-bold text-sm">/ {roomState.settings.totalRounds}</span>
               </div>
+            </div>
+
+            {/* Volume Control */}
+            <div className="relative" ref={volumeRef}>
+              <button
+                onClick={toggleMute}
+                onContextMenu={(e) => { e.preventDefault(); setShowVolume(!showVolume); }}
+                onMouseEnter={() => setShowVolume(true)}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  audioPlayer.volume === 0
+                    ? 'bg-white/5 text-white/40'
+                    : 'bg-white/10 text-white hover:bg-white/20'
+                }`}
+                aria-label={audioPlayer.volume === 0 ? 'Unmute audio' : 'Mute audio'}
+                title={audioPlayer.volume === 0 ? 'Unmute' : 'Mute'}
+              >
+                {audioPlayer.volume === 0 ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <line x1="23" y1="9" x2="17" y2="15" />
+                    <line x1="17" y1="9" x2="23" y2="15" />
+                  </svg>
+                ) : audioPlayer.volume < 0.5 ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Volume Slider Popover */}
+              {showVolume && (
+                <div
+                  className="absolute top-full right-0 mt-2 z-50 glass-panel rounded-2xl p-3 flex items-center gap-3"
+                  onMouseLeave={() => setShowVolume(false)}
+                >
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(audioPlayer.volume * 100)}
+                    onChange={(e) => audioPlayer.setVolume(Number(e.target.value) / 100)}
+                    className="w-24 accent-primary h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full"
+                    aria-label="Volume"
+                  />
+                  <span className="text-xs text-white/40 font-bold w-8">{Math.round(audioPlayer.volume * 100)}%</span>
+                </div>
+              )}
             </div>
 
             {/* Pause Button */}
@@ -167,7 +258,8 @@ export default function GamePage() {
                     ? 'bg-yellow-500 text-black hover:bg-yellow-400'
                     : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
-                title="Pause Game"
+                aria-label={roomState.isPaused ? 'Resume game' : 'Pause game'}
+                title={roomState.isPaused ? 'Resume' : 'Pause'}
               >
                 {roomState.isPaused ? '▶' : 'II'}
               </button>
@@ -177,6 +269,7 @@ export default function GamePage() {
             <button
               onClick={() => router.push('/')}
               className="w-10 h-10 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all"
+              aria-label="Leave game"
               title="Leave Game"
             >
               ✕
@@ -214,7 +307,7 @@ export default function GamePage() {
               Leaderboard
               <span className="flex-1 h-px bg-white/10"></span>
             </h3>
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar" aria-live="polite">
               <ScoreBoard />
             </div>
           </div>

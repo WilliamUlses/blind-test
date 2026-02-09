@@ -21,6 +21,23 @@ const DEFAULT_CONFIG: FuzzyMatchConfig = {
 const ARTICLES = ['le', 'la', 'les', 'l', 'un', 'une', 'des', 'the', 'a', 'an'];
 
 /**
+ * Nettoie les mentions "feat" / "ft" des titres de morceaux
+ * Ex: "Love Me Again (feat. John Newman)" → "Love Me Again"
+ * Ex: "Song [ft. Artist]" → "Song"
+ * Ex: "Song - feat. Artist" → "Song"
+ */
+export function stripFeaturing(title: string): string {
+  return title
+    // Parenthèses/crochets contenant feat/ft/featuring
+    .replace(/\s*[\(\[][^)\]]*\b(?:feat|ft|featuring)\.?\b[^)\]]*[\)\]]/gi, '')
+    // "- feat. Artist" ou "- ft. Artist" en fin de chaîne
+    .replace(/\s*-\s*(?:feat|ft|featuring)\.?\s.*/gi, '')
+    // "feat. Artist" en fin de chaîne (sans tiret ni parenthèses)
+    .replace(/\s+(?:feat|ft|featuring)\.?\s.*/gi, '')
+    .trim();
+}
+
+/**
  * Normalise une chaîne de caractères pour la comparaison
  * @param str - La chaîne à normaliser
  * @param config - Configuration du fuzzy matching
@@ -123,45 +140,6 @@ export function similarityScore(str1: string, str2: string): number {
 }
 
 /**
- * Vérifie si deux chaînes correspondent avec le fuzzy matching
- *
- * @param answer - La réponse donnée par le joueur
- * @param expected - La réponse attendue
- * @param config - Configuration optionnelle du fuzzy matching
- * @returns true si les chaînes correspondent selon le seuil, false sinon
- */
-export function fuzzyMatch(
-  answer: string,
-  expected: string,
-  config: FuzzyMatchConfig = DEFAULT_CONFIG
-): boolean {
-  // Normalisation des deux chaînes
-  const normalizedAnswer = normalizeString(answer, config);
-  const normalizedExpected = normalizeString(expected, config);
-
-  // Cas d'égalité parfaite après normalisation
-  if (normalizedAnswer === normalizedExpected) {
-    return true;
-  }
-
-  // Calcul du score de similarité
-  const similarity = similarityScore(normalizedAnswer, normalizedExpected);
-
-  // Vérification du seuil
-  return similarity >= config.threshold;
-}
-
-/**
- * Vérifie si une réponse est correcte en comparant avec le titre et l'artiste
- *
- * @param answer - La réponse donnée par le joueur
- * @param trackTitle - Le titre du morceau
- * @param artistName - Le nom de l'artiste
- * @param acceptArtistOnly - Accepter seulement l'artiste comme réponse valide
- * @param acceptTitleOnly - Accepter seulement le titre comme réponse valide
- * @returns Un objet indiquant si la réponse est correcte et quel type de correspondance
- */
-/**
  * Sépare les noms d'artistes (feat, &, vs, etc.)
  */
 export function splitArtistNames(artistName: string): string[] {
@@ -186,38 +164,37 @@ export function checkAnswer(
   matchType: 'title' | 'artist' | 'both' | 'none';
   similarity: number;
 } {
-  // Normalisation
+  // Normalisation - strip "feat." from title so users don't need to type it
   const normalizedAnswer = normalizeString(answer);
-  const normalizedTitle = normalizeString(trackTitle);
+  const cleanTitle = stripFeaturing(trackTitle);
+  const normalizedTitle = normalizeString(cleanTitle);
   const normalizedArtist = normalizeString(artistName);
+
+  // Seuil de similarité proportionnel (0.75 = 75% de ressemblance minimum)
+  const threshold = GAME_CONSTANTS.FUZZY_THRESHOLD;
 
   // Combinaisons possibles pour "Artiste + Titre"
   const full1 = `${normalizedTitle} ${normalizedArtist}`;
   const full2 = `${normalizedArtist} ${normalizedTitle}`; // Ordre inverse accepté
 
-  // Calcul des distances principales
-  const distTitle = levenshteinDistance(normalizedAnswer, normalizedTitle);
-  const distArtist = levenshteinDistance(normalizedAnswer, normalizedArtist);
-  const distFull1 = levenshteinDistance(normalizedAnswer, full1);
-  const distFull2 = levenshteinDistance(normalizedAnswer, full2);
+  // Calcul des similarités (proportionnel à la longueur des chaînes)
+  const simTitle = similarityScore(normalizedAnswer, normalizedTitle);
+  const simArtist = similarityScore(normalizedAnswer, normalizedArtist);
+  const simFull1 = similarityScore(normalizedAnswer, full1);
+  const simFull2 = similarityScore(normalizedAnswer, full2);
 
-  // Tolérance d'erreur (4-5 char max comme demandé)
-  const MAX_ERRORS = 5;
+  // Checks basés sur le seuil proportionnel
+  const isTitleCorrect = simTitle >= threshold;
+  let isArtistCorrect = simArtist >= threshold;
+  const isFullCorrect = simFull1 >= threshold || simFull2 >= threshold;
 
-  // Checks spécifiques de base
-  const isTitleCorrect = distTitle <= MAX_ERRORS;
-  let isArtistCorrect = distArtist <= MAX_ERRORS;
-  const isFullCorrect = distFull1 <= MAX_ERRORS || distFull2 <= MAX_ERRORS;
-
-  // Si l'artiste n'est pas trouvé "exactement", on vérifie les parties (feat.)
+  // Si l'artiste n'est pas trouvé, on vérifie les parties (feat.)
   if (!isArtistCorrect) {
     const artistParts = splitArtistNames(artistName);
-    // Si on a plusieurs parties, on vérifie chacune
     if (artistParts.length > 1) {
       for (const part of artistParts) {
         const normalizedPart = normalizeString(part);
-        const distPart = levenshteinDistance(normalizedAnswer, normalizedPart);
-        if (distPart <= MAX_ERRORS) {
+        if (similarityScore(normalizedAnswer, normalizedPart) >= threshold) {
           isArtistCorrect = true;
           break;
         }
@@ -225,10 +202,8 @@ export function checkAnswer(
     }
   }
 
-  // Calcul pour la similarité (statistique - approximatif ici car on a plusieurs checks)
-  const bestDist = Math.min(distTitle, distArtist, distFull1, distFull2);
-  const maxLength = Math.max(normalizedAnswer.length, full1.length);
-  const similarity = 1 - (bestDist / maxLength);
+  // Meilleure similarité trouvée
+  const similarity = Math.max(simTitle, simArtist, simFull1, simFull2);
 
   // 1. Si on force "Artiste seulement"
   if (acceptArtistOnly) {

@@ -14,6 +14,13 @@ import {
 /**
  * État local du joueur (informations côté client uniquement)
  */
+interface AnswerAttemptLocal {
+  text: string;
+  correct: boolean;
+  foundPart?: 'artist' | 'title' | 'both';
+  timestamp: number;
+}
+
 interface LocalPlayerState {
   id: string | null;
   pseudo: string | null;
@@ -22,6 +29,7 @@ interface LocalPlayerState {
   hasSubmittedAnswer: boolean; // A soumis une réponse ce round (correcte ou non)
   foundArtist: boolean;
   foundTitle: boolean;
+  answerHistory: AnswerAttemptLocal[];
 }
 
 /**
@@ -66,6 +74,8 @@ interface GameStore {
   clearPlayerCooldown: () => void;
   setHasSubmittedAnswer: (value: boolean) => void;
   setLocalPlayerFoundPart: (part: 'artist' | 'title' | 'both') => void;
+  addAnswerAttempt: (text: string) => void;
+  markLastAttemptResult: (correct: boolean, foundPart?: 'artist' | 'title' | 'both') => void;
   setConnectionStatus: (isConnected: boolean, isConnecting?: boolean) => void;
   setError: (error: { code: string; message: string } | null) => void;
   updateServerTimeOffset: (serverTime: number) => void;
@@ -88,6 +98,7 @@ const initialLocalPlayer: LocalPlayerState = {
   hasSubmittedAnswer: false,
   foundArtist: false,
   foundTitle: false,
+  answerHistory: [],
 };
 
 /**
@@ -134,6 +145,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         cooldownEndsAt: null,
         foundArtist: false,
         foundTitle: false,
+        answerHistory: [],
       },
     });
   },
@@ -209,6 +221,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
         foundTitle: part === 'title' || part === 'both' ? true : state.localPlayer.foundTitle,
       },
     }));
+  },
+
+  addAnswerAttempt: (text: string) => {
+    set((state) => ({
+      localPlayer: {
+        ...state.localPlayer,
+        answerHistory: [
+          ...state.localPlayer.answerHistory,
+          { text, correct: false, timestamp: Date.now() },
+        ],
+      },
+    }));
+  },
+
+  markLastAttemptResult: (correct: boolean, foundPart?: 'artist' | 'title' | 'both') => {
+    set((state) => {
+      const history = [...state.localPlayer.answerHistory];
+      if (history.length > 0) {
+        history[history.length - 1] = {
+          ...history[history.length - 1],
+          correct,
+          foundPart,
+        };
+      }
+      return { localPlayer: { ...state.localPlayer, answerHistory: history } };
+    });
   },
 
   setConnectionStatus: (isConnected: boolean, isConnecting = false) => {

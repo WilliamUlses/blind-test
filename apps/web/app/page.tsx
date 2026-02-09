@@ -21,9 +21,7 @@ export default function HomePage() {
 
   // Redirection vers le lobby quand une room est rejointe
   useEffect(() => {
-    console.log('👀 HomePage useEffect - roomState:', roomState);
     if (roomState?.code) {
-      console.log('🚀 Redirecting to lobby:', roomState.code);
       router.push(`/lobby/${roomState.code}`);
     }
   }, [roomState, router]);

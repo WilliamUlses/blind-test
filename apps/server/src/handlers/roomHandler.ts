@@ -15,6 +15,12 @@ import {
 import { createGameManager, gameManagers, deleteGameManager } from './gameHandler';
 
 /**
+ * Map des timeouts de déconnexion par playerId
+ * Permet d'annuler le timeout si le joueur se reconnecte avant expiration
+ */
+const disconnectTimeouts = new Map<string, NodeJS.Timeout>();
+
+/**
  * Génère un code de room unique
  */
 function generateRoomCode(): string {
@@ -67,13 +73,16 @@ function createPlayer(
     score: 0,
     streak: 0,
     hasAnsweredCorrectly: false,
+    foundArtist: false,
+    foundTitle: false,
     cooldownUntil: null,
     hasVotedToPause: false,
   };
 }
 
 /**
- * Valide un pseudo
+ * Valide et sanitise un pseudo
+ * Refuse les caractères HTML/script pour éviter le XSS côté client
  */
 function validatePseudo(pseudo: string): { valid: boolean; error?: string } {
   if (!pseudo || typeof pseudo !== 'string') {
@@ -96,7 +105,23 @@ function validatePseudo(pseudo: string): { valid: boolean; error?: string } {
     };
   }
 
+  // Refuser les caractères dangereux (<, >, &, ", ')
+  if (/[<>&"']/.test(trimmed)) {
+    return { valid: false, error: 'Le pseudo contient des caractères non autorisés' };
+  }
+
   return { valid: true };
+}
+
+/**
+ * Valide une URL d'avatar (uniquement http/https, pas de javascript: ou data:)
+ */
+function sanitizeAvatarUrl(url: string | undefined): string | undefined {
+  if (!url || typeof url !== 'string') return undefined;
+  const trimmed = url.trim();
+  if (trimmed.length > 500) return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return undefined; // Rejeter tout ce qui n'est pas http(s)
 }
 
 /**
@@ -135,7 +160,7 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
 
       // Créer le player (qui sera l'hôte)
       const playerId = socket.id;
-      const host = createPlayer(playerId, pseudo.trim(), avatarUrl);
+      const host = createPlayer(playerId, pseudo.trim(), sanitizeAvatarUrl(avatarUrl));
 
       // Configuration par défaut
       const defaultSettings: GameSettings = {
@@ -161,6 +186,7 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
         settings: finalSettings,
         currentRound: 0,
         totalRounds: finalSettings.totalRounds,
+        isPaused: false,
       };
 
       // Créer le GameManager
@@ -180,7 +206,6 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
         roomState: manager.getState(),
       });
 
-      console.log(`Room ${roomCode} created by ${pseudo}`);
     } catch (error) {
       console.error('Error in create_room:', error);
       sendError(socket, 'SERVER_ERROR');
@@ -229,15 +254,22 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
       if (existingPlayer) {
         if (!existingPlayer.isActive) {
           // C'est une reconnexion !
-          console.log(`Player ${pseudo} reconnecting to ${roomCode}`);
 
           const oldPlayerId = existingPlayer.id;
           const newPlayerId = socket.id;
 
+          // Annuler le timeout de suppression programmé à la déconnexion
+          const pendingTimeout = disconnectTimeouts.get(oldPlayerId);
+          if (pendingTimeout) {
+            clearTimeout(pendingTimeout);
+            disconnectTimeouts.delete(oldPlayerId);
+          }
+
           // Mettre à jour le joueur
           existingPlayer.id = newPlayerId;
           existingPlayer.isActive = true;
-          if (avatarUrl) existingPlayer.avatarUrl = avatarUrl; // Mettre à jour l'avatar si fourni
+          const safeAvatar = sanitizeAvatarUrl(avatarUrl);
+          if (safeAvatar) existingPlayer.avatarUrl = safeAvatar;
 
           // Si c'était l'hôte, mettre à jour l'hostId de la room
           if (state.hostId === oldPlayerId) {
@@ -280,7 +312,7 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
 
       // Créer le player
       const playerId = socket.id;
-      const player = createPlayer(playerId, pseudo.trim(), avatarUrl);
+      const player = createPlayer(playerId, pseudo.trim(), sanitizeAvatarUrl(avatarUrl));
 
       // Ajouter le joueur
       manager.addPlayer(player);
@@ -301,7 +333,6 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
       // Notifier tous les autres joueurs
       socket.to(roomCode).emit('player_joined', { player });
 
-      console.log(`${pseudo} joined room ${roomCode}`);
     } catch (error) {
       console.error('Error in join_room:', error);
       sendError(socket, 'SERVER_ERROR');
@@ -345,10 +376,7 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
       const state = manager.getState();
       if (state.players.length === 0) {
         deleteGameManager(roomCode);
-        console.log(`Room ${roomCode} deleted (empty)`);
       }
-
-      console.log(`Player ${playerId} left room ${roomCode}`);
     } catch (error) {
       console.error('Error in leave_room:', error);
     }
@@ -404,7 +432,6 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
       // Notifier les autres
       socket.to(roomCode).emit('player_left', { playerId });
 
-      console.log(`Player ${playerId} kicked from room ${roomCode}`);
     } catch (error) {
       console.error('Error in kick_player:', error);
       sendError(socket, 'SERVER_ERROR');
@@ -492,7 +519,9 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
         manager.updateState(state);
 
         // Après le délai de reconnexion, retirer définitivement si toujours inactif
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
+          disconnectTimeouts.delete(playerId);
+
           const currentState = manager.getState();
           const currentPlayer = currentState.players.find((p) => p.id === playerId);
 
@@ -507,13 +536,13 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
             // Si la room est vide, la supprimer
             if (currentState.players.length === 0) {
               deleteGameManager(roomCode);
-              console.log(`Room ${roomCode} deleted (empty after disconnection)`);
             }
           }
         }, GAME_CONSTANTS.RECONNECTION_WINDOW_MS);
+
+        disconnectTimeouts.set(playerId, timeoutId);
       }
 
-      console.log(`Player ${playerId} disconnected from room ${roomCode}`);
     } catch (error) {
       console.error('Error in disconnect:', error);
     }

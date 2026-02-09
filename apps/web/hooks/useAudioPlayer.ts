@@ -339,11 +339,8 @@ export function useSyncedAudioPlayer() {
     const now = Date.now() + syncTarget.offset;
     const delay = syncTarget.startTimestamp - now;
 
-    console.log('[Audio Sync] Ready to sync', { delay, duration });
-
     if (delay > 0) {
       // Attendre le bon moment
-      console.log(`[Audio Sync] Scheduling play in ${delay}ms`);
       playTimeoutRef.current = setTimeout(() => {
         play();
         setIsSynced(true);
@@ -354,11 +351,9 @@ export function useSyncedAudioPlayer() {
       const seekTime = elapsed / 1000; // secondes
 
       if (seekTime < duration) {
-        console.log(`[Audio Sync] Seeking to ${seekTime}s`);
         playAtTime(seekTime);
         setIsSynced(true);
       } else {
-        console.warn('[Audio Sync] Too late to play, audio finished');
         setIsSynced(true); // Marquer comme traité même si trop tard
       }
     }

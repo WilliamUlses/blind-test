@@ -32,8 +32,9 @@ interface RoundInfo {
   albumCover: string;
   startTimestamp: number;
   endTimestamp: number;
-  playersWhoFound: Set<string>; // IDs des joueurs qui ont trouvé
+  playersWhoFound: Set<string>; // IDs des joueurs qui ont tout trouvé (artiste + titre)
   playerPositions: Map<string, number>; // Position de chaque joueur (1, 2, 3...)
+  playerRoundPoints: Map<string, number>; // Points gagnés par joueur dans ce round
   attempts: AnswerAttempt[]; // Toutes les tentatives de réponse
 }
 
@@ -74,6 +75,13 @@ export class GameManager {
     return this.roomState;
   }
 
+  /**
+   * Met à jour l'état de la room (utilisé lors de la reconnexion)
+   */
+  public updateState(state: RoomState): void {
+    this.roomState = state;
+  }
+
   // ... (existing code)
 
   /**
@@ -99,7 +107,6 @@ export class GameManager {
 
     // Auto-close si un seul joueur reste en cours de partie
     if (this.roomState.status !== 'WAITING' && this.roomState.status !== 'FINISHED' && this.roomState.players.length < 2) {
-      console.log('🛑 Auto-closing game: only 1 player left');
       this.endGame();
     }
 
@@ -193,13 +200,42 @@ export class GameManager {
 
   /**
    * Met à jour les paramètres de la room (host only)
+   * Valide les bornes pour empêcher des valeurs abusives
    */
   updateSettings(playerId: string, settings: Partial<GameSettings>): boolean {
     if (playerId !== this.roomState.hostId) {
       return false;
     }
 
-    this.roomState.settings = { ...this.roomState.settings, ...settings };
+    // Clamp les valeurs numériques dans des bornes sûres
+    const sanitized: Partial<GameSettings> = { ...settings };
+
+    if (sanitized.totalRounds !== undefined) {
+      sanitized.totalRounds = Math.max(GAME_CONSTANTS.MIN_ROUNDS, Math.min(GAME_CONSTANTS.MAX_ROUNDS, sanitized.totalRounds));
+    }
+    if (sanitized.maxPlayers !== undefined) {
+      sanitized.maxPlayers = Math.max(GAME_CONSTANTS.MIN_PLAYERS, Math.min(GAME_CONSTANTS.MAX_PLAYERS, sanitized.maxPlayers));
+    }
+    if (sanitized.roundDurationMs !== undefined) {
+      sanitized.roundDurationMs = Math.max(5_000, Math.min(120_000, sanitized.roundDurationMs));
+    }
+    if (sanitized.revealDurationMs !== undefined) {
+      sanitized.revealDurationMs = Math.max(2_000, Math.min(30_000, sanitized.revealDurationMs));
+    }
+    if (sanitized.wrongAnswerCooldownMs !== undefined) {
+      sanitized.wrongAnswerCooldownMs = Math.max(500, Math.min(10_000, sanitized.wrongAnswerCooldownMs));
+    }
+    if (sanitized.genre !== undefined && sanitized.genre !== null) {
+      sanitized.genre = String(sanitized.genre).slice(0, 50);
+    }
+
+    this.roomState.settings = { ...this.roomState.settings, ...sanitized };
+
+    // Sync the top-level totalRounds field used by game flow
+    if (sanitized.totalRounds !== undefined) {
+      this.roomState.totalRounds = sanitized.totalRounds;
+    }
+
     this.emitRoomUpdate();
     return true;
   }
@@ -255,12 +291,6 @@ export class GameManager {
   }
 
   /**
-   * Démarre un nouveau round
-   */
-  /**
-   * Démarre un nouveau round
-   */
-  /**
    * Notifie les joueurs de la mise à jour de la room
    */
   private emitRoomUpdate(): void {
@@ -284,7 +314,6 @@ export class GameManager {
 
     // Fallback si iTunes échoue
     if (!track) {
-      console.log('⚠️ Fallback to mock data');
       track = this.generateMockTrack(this.roomState.currentRound);
     }
 
@@ -302,6 +331,7 @@ export class GameManager {
       endTimestamp: startTimestamp + roundDurationMs,
       playersWhoFound: new Set(),
       playerPositions: new Map(),
+      playerRoundPoints: new Map(),
       attempts: [],
     };
 
@@ -378,12 +408,16 @@ export class GameManager {
       return { success: false, error: 'ANSWER_COOLDOWN' };
     }
 
-    // Vérifier que le timestamp est valide
+    // Vérifier que le timestamp est valide et cohérent avec le temps serveur
     if (timestamp < this.currentRound.startTimestamp || timestamp > this.currentRound.endTimestamp) {
       return { success: false, error: 'ROUND_EXPIRED' };
     }
+    // Protection contre le clock skew : le timestamp client ne peut pas être dans le futur du serveur
+    // Tolérance de 2s pour le lag réseau
+    const maxAllowedTimestamp = now + 2000;
+    const effectiveTimestamp = Math.min(timestamp, maxAllowedTimestamp);
 
-    const timeTakenMs = timestamp - this.currentRound.startTimestamp;
+    const timeTakenMs = effectiveTimestamp - this.currentRound.startTimestamp;
 
     // Vérifier la réponse
     const settings = this.roomState.settings;
@@ -456,6 +490,8 @@ export class GameManager {
       }
 
       player.score += pointsEarned;
+      const prevRoundPoints = this.currentRound.playerRoundPoints.get(playerId) || 0;
+      this.currentRound.playerRoundPoints.set(playerId, prevRoundPoints + pointsEarned);
       this.emitRoomUpdate();
 
       // Notifier le joueur
@@ -498,27 +534,22 @@ export class GameManager {
         return { success: false, error: 'ALREADY_ANSWERED' }; // Petit message UI, pas de cooldown
       }
 
-      // Vraie mauvaise réponse -> Cooldown
+      // Vraie mauvaise réponse -> Cooldown (le cooldown est la pénalité suffisante)
       const cooldownMs = this.roomState.settings.wrongAnswerCooldownMs;
       const cooldownUntil = now + cooldownMs;
 
       this.playerCooldowns.set(playerId, cooldownUntil);
       player.cooldownUntil = cooldownUntil;
 
-      // Reset le streak sur erreur ?
-      // Débat: Est-ce qu'une erreur sur le titre après avoir trouvé l'artiste casse le streak ?
-      // Sévère: oui. Gentil: non.
-      // On garde le comportement précédent : Erreur = Reset Streak. 
-      // Mais attention, si on a déjà trouvé l'artiste, on a peut-être déjà gagné des points.
-      // Le streak est un multiplicateur pour le futur.
-      player.streak = 0;
+      // Le streak n'est PAS reset ici. Le cooldown de 2s est une pénalité suffisante.
+      // Le streak sera reset en fin de round si le joueur n'a rien trouvé du tout.
 
       // Notifier le joueur
       this.io.to(playerId).emit('answer_result', {
         correct: false,
         pointsEarned: 0,
         totalScore: player.score,
-        streak: 0,
+        streak: player.streak,
         cooldownUntil,
       });
     }
@@ -542,18 +573,25 @@ export class GameManager {
   private endRound(): void {
     if (!this.currentRound) return;
 
+    // Reset le streak des joueurs qui n'ont rien trouvé ce round
+    this.roomState.players.forEach((player) => {
+      if (!player.foundArtist && !player.foundTitle) {
+        player.streak = 0;
+      }
+    });
+
     this.roomState.status = 'REVEAL';
     this.emitRoomUpdate();
 
     // Préparer les résultats
     const playerResults: PlayerRoundResult[] = this.roomState.players.map((player) => {
-      const position = this.currentRound!.playerPositions.get(player.id);
-      const wasCorrect = this.currentRound!.playersWhoFound.has(player.id);
+      // Un joueur est "correct" s'il a trouvé au moins quelque chose (artiste ou titre)
+      const wasCorrect = player.foundArtist || player.foundTitle;
 
       // Compter les tentatives du joueur
       const attemptsCount = this.currentRound!.attempts.filter((a) => a.playerId === player.id).length;
 
-      // Trouver le temps de réponse correcte
+      // Trouver le temps de la première réponse correcte
       const correctAttempt = this.currentRound!.attempts.find(
         (a) => a.playerId === player.id && a.wasCorrect
       );
@@ -563,7 +601,7 @@ export class GameManager {
         pseudo: player.pseudo,
         wasCorrect,
         answeredInMs: correctAttempt?.timeTakenMs ?? null,
-        pointsEarned: wasCorrect ? this.getPointsEarnedInRound(player.id) : 0,
+        pointsEarned: this.getPointsEarnedInRound(player.id),
         totalScore: player.score,
         streak: player.streak,
         attemptsCount,
@@ -593,30 +631,12 @@ export class GameManager {
   }
 
   /**
-   * Calcule les points gagnés par un joueur dans le round actuel
+   * Retourne les points gagnés par un joueur dans le round actuel
+   * Utilise le tracking direct plutôt qu'un recalcul (inclut les points partiels)
    */
   private getPointsEarnedInRound(playerId: string): number {
     if (!this.currentRound) return 0;
-
-    const player = this.roomState.players.find((p) => p.id === playerId);
-    if (!player || !player.hasAnsweredCorrectly) return 0;
-
-    const correctAttempt = this.currentRound.attempts.find(
-      (a) => a.playerId === playerId && a.wasCorrect
-    );
-
-    if (!correctAttempt) return 0;
-
-    const position = this.currentRound.playerPositions.get(playerId) || 999;
-
-    const scoreResult = this.scoreCalculator.calculate({
-      timeTakenMs: correctAttempt.timeTakenMs,
-      roundDurationMs: this.roomState.settings.roundDurationMs,
-      currentStreak: player.streak,
-      position,
-    });
-
-    return scoreResult.totalPoints;
+    return this.currentRound.playerRoundPoints.get(playerId) || 0;
   }
 
   /**

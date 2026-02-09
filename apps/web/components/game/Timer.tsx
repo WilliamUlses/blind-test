@@ -10,7 +10,7 @@ import { useGameStore } from '../../stores/gameStore';
 
 export function Timer() {
   const currentRound = useGameStore((state) => state.currentRound);
-  // const setTimeRemaining = useGameStore((state) => state.setTimeRemaining); // Removed to prevent loop
+  const serverTimeOffset = useGameStore((state) => state.serverTimeOffset);
   const [progress, setProgress] = useState(100);
   const [timeLeft, setTimeLeft] = useState(0);
 
@@ -22,7 +22,8 @@ export function Timer() {
     }
 
     const updateTimer = () => {
-      const now = Date.now();
+      // Corriger le temps local avec l'offset serveur pour synchronisation
+      const now = Date.now() + serverTimeOffset;
       const elapsed = now - currentRound.startTimestamp;
       const total = currentRound.endTimestamp - currentRound.startTimestamp;
       const remaining = Math.max(0, total - elapsed);
@@ -57,7 +58,7 @@ export function Timer() {
   const offset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="relative flex items-center justify-center">
+    <div className="relative flex items-center justify-center" role="status" aria-label={`${formatTime()} seconds remaining`}>
       {/* Gradient Config (hidden) */}
       <svg width="0" height="0">
         <defs>

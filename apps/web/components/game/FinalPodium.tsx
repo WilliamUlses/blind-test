@@ -7,7 +7,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Player } from '../../../packages/shared/types';
+import { Player } from '../../../../packages/shared/types';
 
 interface FinalPodiumProps {
   players: Player[];
