@@ -167,9 +167,7 @@ process.on('SIGTERM', () => {
 });
 
 // Démarrer le serveur
-if (require.main === module) {
-  startServer();
-}
+startServer();
 
 // Export pour les tests
 export { app, io, httpServer, startServer };
