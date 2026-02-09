@@ -9,19 +9,31 @@ interface LobbySettingsProps {
   onUpdateSettings: (settings: Partial<GameSettings>) => void;
 }
 
-const GENRES = [
-  { id: null, label: 'Random' },
-  { id: 'pop', label: 'Pop' },
-  { id: 'rock', label: 'Rock' },
-  { id: 'rap', label: 'Rap' },
-  { id: 'hip-hop', label: 'Hip-Hop' },
-  { id: 'dance', label: 'Dance' },
-  { id: 'electro', label: 'Electro' },
-  { id: 'jazz', label: 'Jazz' },
-  { id: 'blues', label: 'Blues' },
-  { id: 'country', label: 'Country' },
-  { id: 'reggae', label: 'Reggae' },
-] as const;
+const MUSIC_CATEGORIES = {
+  genres: [
+    { id: null, label: 'Random' }, { id: 'pop', label: 'Pop' }, { id: 'rock', label: 'Rock' },
+    { id: 'rap', label: 'Rap' }, { id: 'hip-hop', label: 'Hip-Hop' }, { id: 'dance', label: 'Dance' },
+    { id: 'electro', label: 'Electro' }, { id: 'jazz', label: 'Jazz' }, { id: 'blues', label: 'Blues' },
+    { id: 'country', label: 'Country' }, { id: 'reggae', label: 'Reggae' },
+  ],
+  decades: [
+    { id: '80s', label: '80s' }, { id: '90s', label: '90s' },
+    { id: '2000s', label: '2000s' }, { id: '2010s', label: '2010s' },
+  ],
+  themes: [
+    { id: 'french-classics', label: 'Classiques FR' }, { id: 'summer-hits', label: 'Summer Hits' },
+    { id: 'movie-soundtracks', label: 'Films' }, { id: 'tv-themes', label: 'Séries TV' },
+  ],
+} as const;
+
+type MusicTab = 'genres' | 'decades' | 'themes';
+
+const ALL_GENRE_LABELS: Record<string, string> = {};
+for (const cat of Object.values(MUSIC_CATEGORIES)) {
+  for (const item of cat) {
+    if (item.id) ALL_GENRE_LABELS[item.id] = item.label;
+  }
+}
 
 const DIFFICULTY_PRESETS = {
   easy: {
@@ -54,6 +66,7 @@ function getAnswerMode(settings: GameSettings): AnswerMode {
 
 export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySettingsProps) {
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [musicTab, setMusicTab] = useState<MusicTab>('genres');
 
   const difficulty = settings.difficulty || 'medium';
   const answerMode = getAnswerMode(settings);
@@ -86,17 +99,26 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
     });
   };
 
+  const handleSoloMode = (solo: boolean) => {
+    if (!isHost) return;
+    onUpdateSettings({ isSoloMode: solo });
+  };
+
   // Read-only display for non-host
   if (!isHost) {
     return (
       <div className="space-y-4">
+        <div className="flex justify-between items-center pb-3 border-b border-white/5">
+          <span className="text-white/60 text-sm">Mode</span>
+          <span className="text-primary font-bold">{settings.isSoloMode ? 'Solo' : 'Multiplayer'}</span>
+        </div>
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
           <span className="text-white/60 text-sm">Difficulty</span>
           <span className="text-primary font-bold capitalize">{difficulty}</span>
         </div>
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
           <span className="text-white/60 text-sm">Genre</span>
-          <span className="text-primary font-bold">{settings.genre || 'Random'}</span>
+          <span className="text-primary font-bold">{settings.genre ? (ALL_GENRE_LABELS[settings.genre] || settings.genre) : 'Random'}</span>
         </div>
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
           <span className="text-white/60 text-sm">Rounds</span>
@@ -119,6 +141,35 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
   // Interactive settings for host
   return (
     <div className="space-y-5">
+      {/* Game Mode */}
+      <div>
+        <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+          Game Mode
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => handleSoloMode(false)}
+            className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              !settings.isSoloMode
+                ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                : 'bg-white/5 text-white/40 hover:bg-white/10'
+            }`}
+          >
+            Multiplayer
+          </button>
+          <button
+            onClick={() => handleSoloMode(true)}
+            className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              settings.isSoloMode
+                ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                : 'bg-white/5 text-white/40 hover:bg-white/10'
+            }`}
+          >
+            Solo
+          </button>
+        </div>
+      </div>
+
       {/* Difficulty Presets */}
       <div>
         <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
@@ -145,13 +196,34 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
         </div>
       </div>
 
-      {/* Genre Selector */}
+      {/* Genre Selector (Tabbed) */}
       <div>
         <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
-          Genre
+          Music
         </label>
+        {/* Tabs */}
+        <div className="flex gap-1 mb-2">
+          {([
+            { tab: 'genres' as const, label: 'Genres' },
+            { tab: 'decades' as const, label: 'Decades' },
+            { tab: 'themes' as const, label: 'Themes' },
+          ]).map(({ tab, label }) => (
+            <button
+              key={tab}
+              onClick={() => setMusicTab(tab)}
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                musicTab === tab
+                  ? 'bg-white/15 text-white'
+                  : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {/* Chips */}
         <div className="flex flex-wrap gap-1.5">
-          {GENRES.map((g) => (
+          {MUSIC_CATEGORIES[musicTab].map((g) => (
             <button
               key={g.id ?? 'random'}
               onClick={() => handleGenre(g.id)}

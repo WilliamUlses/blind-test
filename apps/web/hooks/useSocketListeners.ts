@@ -76,6 +76,7 @@ export function useSocketListeners() {
         const onRoundStart = (roundData: RoundData) => {
             setCurrentRound(roundData);
             clearPlayerCooldown();
+            useGameStore.getState().clearEmotes();
         };
 
         const onAnswerResult = ({ correct, cooldownUntil, foundPart }: any) => {
@@ -100,6 +101,10 @@ export function useSocketListeners() {
             updateServerTimeOffset(serverTime);
         };
 
+        const onEmoteReceived = ({ playerId, pseudo, emote }: any) => {
+            useGameStore.getState().addEmote({ playerId, pseudo, emote });
+        };
+
         const onError = ({ code, message }: any) => {
             setError({ code, message });
         };
@@ -116,6 +121,7 @@ export function useSocketListeners() {
         socket.on('answer_result', onAnswerResult);
         socket.on('round_end', onRoundEnd);
         socket.on('time_sync', onTimeSync);
+        socket.on('emote_received', onEmoteReceived);
         socket.on('error', onError);
 
         // Cleanup
@@ -131,6 +137,7 @@ export function useSocketListeners() {
             socket.off('answer_result', onAnswerResult);
             socket.off('round_end', onRoundEnd);
             socket.off('time_sync', onTimeSync);
+            socket.off('emote_received', onEmoteReceived);
             socket.off('error', onError);
         };
     }, []); // Dépendances vides pour n'exécuter qu'au montage

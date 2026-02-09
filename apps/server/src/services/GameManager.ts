@@ -105,8 +105,8 @@ export class GameManager {
       this.roomState.hostId = newHostId;
     }
 
-    // Auto-close si un seul joueur reste en cours de partie
-    if (this.roomState.status !== 'WAITING' && this.roomState.status !== 'FINISHED' && this.roomState.players.length < 2) {
+    // Auto-close si un seul joueur reste en cours de partie (skip in solo mode)
+    if (!this.roomState.settings.isSoloMode && this.roomState.status !== 'WAITING' && this.roomState.status !== 'FINISHED' && this.roomState.players.length < 2) {
       this.endGame();
     }
 
@@ -228,6 +228,9 @@ export class GameManager {
     if (sanitized.genre !== undefined && sanitized.genre !== null) {
       sanitized.genre = String(sanitized.genre).slice(0, 50);
     }
+    if (sanitized.isSoloMode !== undefined) {
+      sanitized.isSoloMode = Boolean(sanitized.isSoloMode);
+    }
 
     this.roomState.settings = { ...this.roomState.settings, ...sanitized };
 
@@ -249,7 +252,8 @@ export class GameManager {
       return { success: false, error: 'NOT_HOST' };
     }
 
-    if (this.roomState.players.length < GAME_CONSTANTS.MIN_PLAYERS) {
+    const minPlayers = this.roomState.settings.isSoloMode ? 1 : GAME_CONSTANTS.MIN_PLAYERS;
+    if (this.roomState.players.length < minPlayers) {
       return { success: false, error: 'NOT_ENOUGH_PLAYERS' };
     }
 

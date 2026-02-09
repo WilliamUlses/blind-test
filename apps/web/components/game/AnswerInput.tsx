@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '../../stores/gameStore';
 import { useGameSocket } from '../../hooks/useGameSocket';
+import { useSoundEffects } from '../../hooks/useSoundEffects';
 
 interface AnswerInputProps {
   disabled?: boolean;
@@ -23,6 +24,7 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { submitAnswer } = useGameSocket();
+  const { playCorrect, playIncorrect } = useSoundEffects();
   const localPlayer = useGameStore((state) => state.localPlayer);
   const currentPlayer = useGameStore((state) => state.getCurrentPlayer());
   const gamePhase = useGameStore((state) => state.getPhase());
@@ -94,11 +96,12 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
   useEffect(() => {
     if (isInCooldown && !prevCooldownRef.current) {
       setFeedbackState('incorrect');
+      playIncorrect();
       const timer = setTimeout(() => setFeedbackState('idle'), 600);
       return () => clearTimeout(timer);
     }
     prevCooldownRef.current = isInCooldown;
-  }, [isInCooldown]);
+  }, [isInCooldown, playIncorrect]);
 
   // Déclencher le feedback "correct" quand une partie est trouvée
   const prevFoundRef = useRef({ artist: localPlayer.foundArtist, title: localPlayer.foundTitle });
@@ -107,12 +110,13 @@ export function AnswerInput({ disabled = false, placeholder = 'Titre ou Artiste.
     const newTitle = localPlayer.foundTitle && !prevFoundRef.current.title;
     if (newArtist || newTitle) {
       setFeedbackState('correct');
+      playCorrect();
       const timer = setTimeout(() => setFeedbackState('idle'), 1000);
       prevFoundRef.current = { artist: localPlayer.foundArtist, title: localPlayer.foundTitle };
       return () => clearTimeout(timer);
     }
     prevFoundRef.current = { artist: localPlayer.foundArtist, title: localPlayer.foundTitle };
-  }, [localPlayer.foundArtist, localPlayer.foundTitle]);
+  }, [localPlayer.foundArtist, localPlayer.foundTitle, playCorrect]);
 
   /**
    * Détermine si l'input est désactivé

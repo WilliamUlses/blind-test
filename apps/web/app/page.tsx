@@ -168,9 +168,7 @@ export default function HomePage() {
           transition={{ delay: 0.5 }}
           className="mt-12 text-center"
         >
-          <p className="text-white/20 text-xs font-mono uppercase tracking-widest">
-            v1.0 • Neo-Grotesque Edition
-          </p>
+
         </motion.div>
       </div>
     </div>

@@ -12,6 +12,7 @@ import { useGameActions } from '../../../hooks/useGameActions';
 import { useRoomState, useIsHost, useGamePhase, useLocalPlayer } from '../../../stores/gameStore';
 import { useGameStore } from '../../../stores/gameStore';
 import { LobbySettings } from '../../../components/game/LobbySettings';
+import { SharePanel } from '../../../components/game/SharePanel';
 
 export default function LobbyPage() {
   const params = useParams();
@@ -108,7 +109,8 @@ export default function LobbyPage() {
   // Host determines start, so we only check if OTHER players are ready
   const otherPlayers = roomState.players.filter(p => p.id !== roomState.hostId);
   const othersReady = otherPlayers.every(p => p.isReady);
-  const canStart = roomState.players.length >= 2 && othersReady;
+  const minPlayers = roomState.settings.isSoloMode ? 1 : 2;
+  const canStart = roomState.players.length >= minPlayers && (roomState.settings.isSoloMode || othersReady);
 
   const copyCode = () => {
     navigator.clipboard.writeText(roomCode);
@@ -211,6 +213,8 @@ export default function LobbyPage() {
 
           {/* Sidebar Actions */}
           <div className="md:col-span-4 space-y-6">
+            <SharePanel roomCode={roomCode} />
+
             <div className="glass-panel p-6 rounded-3xl">
               <h2 className="text-white/60 text-sm font-bold uppercase tracking-widest mb-6">Match Settings</h2>
 

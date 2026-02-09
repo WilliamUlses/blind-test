@@ -6,7 +6,7 @@
 import { Socket, Server } from 'socket.io';
 import { GameManager } from '../services/GameManager';
 import { ERROR_MESSAGES, GAME_CONSTANTS, type ErrorCode } from '../../../../packages/shared/types';
-import { defaultRateLimiter } from '../middlewares/rateLimiter';
+import { defaultRateLimiter, isRateLimited } from '../middlewares/rateLimiter';
 
 /**
  * Map des GameManagers par code de room
@@ -128,6 +128,68 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
     } catch (error) {
       console.error('Error in submit_answer:', error);
       sendError(socket, 'SERVER_ERROR');
+    }
+  });
+
+  /**
+   * Toggle pause (vote-based)
+   */
+  socket.on('toggle_pause', () => {
+    try {
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) {
+        return sendError(socket, 'PLAYER_NOT_IN_ROOM');
+      }
+
+      const manager = gameManagers.get(roomCode);
+      if (!manager) {
+        return sendError(socket, 'ROOM_NOT_FOUND');
+      }
+
+      const playerId = socket.data.playerId;
+      if (!playerId) {
+        return sendError(socket, 'PLAYER_NOT_IN_ROOM');
+      }
+
+      manager.togglePauseVote(playerId);
+    } catch (error) {
+      console.error('Error in toggle_pause:', error);
+      sendError(socket, 'SERVER_ERROR');
+    }
+  });
+
+  /**
+   * Envoyer un emote (réaction emoji)
+   */
+  socket.on('send_emote', (data: { emote: string }) => {
+    try {
+      const { emote } = data;
+
+      // Validate emote
+      if (!emote || !GAME_CONSTANTS.VALID_EMOTES.includes(emote)) {
+        return;
+      }
+
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) return;
+
+      const playerId = socket.data.playerId;
+      const pseudo = socket.data.pseudo;
+      if (!playerId || !pseudo) return;
+
+      // Rate limit: 5 emotes per 10s
+      if (isRateLimited(socket.id, 'send_emote', 5, 10_000)) {
+        return;
+      }
+
+      // Broadcast to room
+      io.to(roomCode).emit('emote_received', {
+        playerId,
+        pseudo,
+        emote,
+      });
+    } catch (error) {
+      console.error('Error in send_emote:', error);
     }
   });
 

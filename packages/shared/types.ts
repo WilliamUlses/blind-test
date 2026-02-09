@@ -52,6 +52,7 @@ export interface GameSettings {
   acceptTitleOnly: boolean;   // Accepter juste le titre comme réponse valide
   wrongAnswerCooldownMs: number; // Cooldown après une mauvaise réponse (default: 2000)
   difficulty?: 'easy' | 'medium' | 'hard'; // Preset (cosmetic, actual values in other fields)
+  isSoloMode?: boolean; // Solo practice mode (single player allowed)
 }
 
 /**
@@ -159,6 +160,9 @@ export interface ClientToServerEvents {
 
   // Chat
   send_message: (data: { message: string }) => void;
+
+  // Emotes
+  send_emote: (data: { emote: string }) => void;
 }
 
 /**
@@ -228,6 +232,9 @@ export interface ServerToClientEvents {
     message: string;
     timestamp: number
   }) => void;
+
+  // Emotes
+  emote_received: (data: { playerId: string; pseudo: string; emote: string }) => void;
 
   // Errors
   error: (data: { code: ErrorCode; message: string }) => void;
@@ -325,6 +332,9 @@ export const GAME_CONSTANTS = {
   // Rate limiting
   MAX_MESSAGES_PER_SECOND: 3,
   MAX_ANSWER_ATTEMPTS_PER_ROUND: 50, // Limite de sécurité pour éviter le spam
+
+  // Emotes
+  VALID_EMOTES: ['🔥', '👏', '😂', '😮', '💀', '❤️', '🎵', '⚡'] as string[],
 } as const;
 
 /**

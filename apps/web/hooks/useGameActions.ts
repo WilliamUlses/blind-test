@@ -63,7 +63,10 @@ export function useGameActions() {
         socket.emit('toggle_pause');
     }, []);
 
-
+    const sendEmote = useCallback((emote: string) => {
+        const socket = getSocket();
+        socket.emit('send_emote', { emote });
+    }, []);
 
     return {
         createRoom,
@@ -76,5 +79,6 @@ export function useGameActions() {
         submitAnswer,
         sendMessage,
         togglePause,
+        sendEmote,
     };
 }

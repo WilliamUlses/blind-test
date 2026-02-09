@@ -77,6 +77,61 @@ const POPULAR_ARTISTS: Record<string, string[]> = {
 };
 
 /**
+ * Artistes populaires par décennie
+ */
+const POPULAR_ARTISTS_BY_DECADE: Record<string, string[]> = {
+    '80s': [
+        'Michael Jackson', 'Madonna', 'Prince', 'Queen', 'Cyndi Lauper',
+        'Bon Jovi', 'Whitney Houston', 'A-ha', 'Depeche Mode', 'Dire Straits',
+        'Eurythmics', 'Wham!', 'Phil Collins', 'Tina Turner', 'David Bowie',
+        'George Michael', 'The Police', 'U2', 'Culture Club', 'Duran Duran',
+    ],
+    '90s': [
+        'Nirvana', 'Oasis', 'Spice Girls', 'Backstreet Boys', 'Britney Spears',
+        'TLC', 'Alanis Morissette', 'No Doubt', 'Radiohead', 'Green Day',
+        'The Cranberries', 'Blur', 'R.E.M.', 'Mariah Carey', 'Celine Dion',
+        'Ace of Base', 'Fugees', 'Daft Punk', 'MC Solaar', 'IAM',
+    ],
+    '2000s': [
+        'Beyoncé', 'Eminem', 'Coldplay', 'Alicia Keys', 'Usher',
+        'Black Eyed Peas', 'Rihanna', 'Amy Winehouse', '50 Cent', 'Kanye West',
+        'Shakira', 'Linkin Park', 'Avril Lavigne', 'Nelly Furtado', 'Justin Timberlake',
+        'OutKast', 'Jay-Z', 'Stromae', 'Diam\'s', 'M Pokora',
+    ],
+    '2010s': [
+        'Adele', 'Bruno Mars', 'Ed Sheeran', 'Taylor Swift', 'Drake',
+        'The Weeknd', 'Ariana Grande', 'Imagine Dragons', 'Lorde', 'Sam Smith',
+        'Pharrell Williams', 'Avicii', 'David Guetta', 'Maître Gims', 'Stromae',
+        'Angèle', 'Aya Nakamura', 'Nekfeu', 'Orelsan', 'PNL',
+    ],
+};
+
+/**
+ * Artistes par thème spécial
+ */
+const THEME_ARTISTS: Record<string, string[]> = {
+    'french-classics': [
+        'Édith Piaf', 'Jacques Brel', 'Charles Aznavour', 'Claude François', 'Serge Gainsbourg',
+        'Françoise Hardy', 'Johnny Hallyday', 'Michel Sardou', 'France Gall', 'Dalida',
+        'Joe Dassin', 'Alain Bashung', 'Jean-Jacques Goldman', 'Michel Polnareff', 'Renaud',
+    ],
+    'summer-hits': [
+        'Luis Fonsi', 'Shakira', 'Sean Paul', 'DJ Snake', 'Major Lazer',
+        'Kygo', 'David Guetta', 'Bob Sinclar', 'Ricky Martin', 'Los Del Rio',
+        'Gala', 'Daddy Yankee', 'J Balvin', 'Ofenbach', 'Jason Derulo',
+    ],
+    'movie-soundtracks': [
+        'Céline Dion', 'Whitney Houston', 'Adele', 'Eminem', 'John Travolta',
+        'Olivia Newton-John', 'Bryan Adams', 'Berlin', 'Elton John', 'Phil Collins',
+        'Queen', 'Survivor', 'Kenny Loggins', 'Vangelis', 'Hans Zimmer',
+    ],
+    'tv-themes': [
+        'Rembrandts', 'Bill Conti', 'Ramin Djawadi', 'Bear McCreary', 'Mark Snow',
+        'Danny Elfman', 'Jeff Buckley',
+    ],
+};
+
+/**
  * Used tracks cache to avoid repeating songs within the same game session.
  * Keys are room-level, but since ITunesService is a singleton, we use a simple Set.
  * Cleared periodically or when it grows too large.
@@ -101,7 +156,9 @@ export class ITunesService {
     } | null> {
         try {
             const normalizedGenre = genre.toLowerCase();
-            const artists = POPULAR_ARTISTS[normalizedGenre];
+            const artists = POPULAR_ARTISTS[normalizedGenre]
+                || POPULAR_ARTISTS_BY_DECADE[normalizedGenre]
+                || THEME_ARTISTS[normalizedGenre];
 
             let term: string;
             if (artists && artists.length > 0) {

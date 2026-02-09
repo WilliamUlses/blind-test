@@ -47,6 +47,14 @@ interface CurrentRound {
 /**
  * État global du store
  */
+interface EmoteEntry {
+  id: string;
+  playerId: string;
+  pseudo: string;
+  emote: string;
+  x: number;
+}
+
 interface GameStore {
   // Room state
   roomState: RoomState | null;
@@ -55,6 +63,9 @@ interface GameStore {
 
   // Local player state
   localPlayer: LocalPlayerState;
+
+  // Emotes
+  emotes: EmoteEntry[];
 
   // Loading & errors
   isConnecting: boolean;
@@ -76,6 +87,8 @@ interface GameStore {
   setLocalPlayerFoundPart: (part: 'artist' | 'title' | 'both') => void;
   addAnswerAttempt: (text: string) => void;
   markLastAttemptResult: (correct: boolean, foundPart?: 'artist' | 'title' | 'both') => void;
+  addEmote: (data: { playerId: string; pseudo: string; emote: string }) => void;
+  clearEmotes: () => void;
   setConnectionStatus: (isConnected: boolean, isConnecting?: boolean) => void;
   setError: (error: { code: string; message: string } | null) => void;
   updateServerTimeOffset: (serverTime: number) => void;
@@ -110,6 +123,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentRound: null,
   lastRoundResult: null,
   localPlayer: initialLocalPlayer,
+  emotes: [],
   isConnecting: false,
   isConnected: false,
   error: null,
@@ -249,6 +263,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  addEmote: (data: { playerId: string; pseudo: string; emote: string }) => {
+    const entry: EmoteEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      playerId: data.playerId,
+      pseudo: data.pseudo,
+      emote: data.emote,
+      x: 5 + Math.random() * 85,
+    };
+    set((state) => ({
+      emotes: [...state.emotes.slice(-9), entry], // Max 10 visible
+    }));
+    // Auto-remove after 3s
+    setTimeout(() => {
+      set((state) => ({
+        emotes: state.emotes.filter((e) => e.id !== entry.id),
+      }));
+    }, 3000);
+  },
+
+  clearEmotes: () => {
+    set({ emotes: [] });
+  },
+
   setConnectionStatus: (isConnected: boolean, isConnecting = false) => {
     set({ isConnected, isConnecting });
   },
@@ -269,6 +306,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentRound: null,
       lastRoundResult: null,
       localPlayer: initialLocalPlayer,
+      emotes: [],
       isConnecting: false,
       isConnected: false,
       error: null,

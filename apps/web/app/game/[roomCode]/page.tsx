@@ -17,6 +17,8 @@ import { AnswerInput } from '../../../components/game/AnswerInput';
 import { ScoreBoard } from '../../../components/game/ScoreBoard';
 import { useSyncedAudioPlayer } from '../../../hooks/useAudioPlayer';
 import { RevealView } from '../../../components/game/RevealView';
+import { EmoteBar } from '../../../components/game/EmoteBar';
+import { EmoteOverlay } from '../../../components/game/EmoteOverlay';
 
 // Helper component for Rejoin
 function JoinButton({ pseudo, roomCode, onJoin }: { pseudo: string, roomCode: string, onJoin: () => void }) {
@@ -69,7 +71,8 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRound?.previewUrl, currentRound?.startTimestamp, gamePhase]);
 
-  const { togglePause } = useGameActions();
+  const { togglePause, sendEmote } = useGameActions();
+  const emotes = useGameStore((state) => state.emotes);
 
   // Rediriger si la partie est terminée
   useEffect(() => {
@@ -148,6 +151,9 @@ export default function GamePage() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col relative overflow-hidden">
+      {/* Emote Overlay */}
+      <EmoteOverlay emotes={emotes} />
+
       {/* Background Ambience */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-primary/10 rounded-full blur-[120px] animate-pulse-slow" />
@@ -290,7 +296,10 @@ export default function GamePage() {
             {/* Answer Input Area */}
             <div className="w-full max-w-2xl relative z-20">
               {gamePhase === 'PLAYING' ? (
-                <AnswerInput placeholder="Type Artist + Title..." />
+                <>
+                  <AnswerInput placeholder="Type Artist + Title..." />
+                  <EmoteBar onEmote={sendEmote} />
+                </>
               ) : gamePhase === 'REVEAL' ? (
                 <RevealView />
               ) : (

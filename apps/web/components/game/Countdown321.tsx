@@ -8,9 +8,11 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '../../stores/gameStore';
+import { useSoundEffects } from '../../hooks/useSoundEffects';
 
 export function Countdown321() {
   const gamePhase = useGameStore((state) => state.getPhase());
+  const { playTick } = useSoundEffects();
   const [count, setCount] = useState<number | 'GO' | null>(null);
 
   useEffect(() => {
@@ -24,11 +26,13 @@ export function Countdown321() {
     let index = 0;
 
     setCount(sequence[0]);
+    playTick();
 
     const interval = setInterval(() => {
       index++;
       if (index < sequence.length) {
         setCount(sequence[index]);
+        if (typeof sequence[index] === 'number') playTick();
       } else {
         clearInterval(interval);
         setCount(null);
@@ -36,7 +40,7 @@ export function Countdown321() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [gamePhase]);
+  }, [gamePhase, playTick]);
 
   if (gamePhase !== 'COUNTDOWN') {
     return null;
