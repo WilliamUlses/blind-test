@@ -1,0 +1,173 @@
+// Schéma Prisma pour le Blind Test Musical
+// Base de données PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================
+// MODÈLE UTILISATEUR
+// ========================
+
+model User {
+  id        String   @id @default(cuid())
+  pseudo    String
+  avatarUrl String?
+
+  // Relations
+  scores    Score[]
+  rooms     RoomPlayer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ========================
+// MODÈLE ROOM
+// ========================
+
+model Room {
+  id          String     @id @default(cuid())
+  code        String     @unique  // Ex: "BT-7K3F"
+  hostId      String
+  status      RoomStatus @default(WAITING)
+  maxPlayers  Int        @default(8)
+  totalRounds Int        @default(10)
+  genre       String?    // Filtre musical optionnel (pop, rock, rap...)
+
+  // Configuration de la room
+  roundDurationMs       Int     @default(30000)
+  revealDurationMs      Int     @default(5000)
+  acceptArtistOnly      Boolean @default(false)
+  acceptTitleOnly       Boolean @default(false)
+  wrongAnswerCooldownMs Int     @default(2000) // Cooldown de 2s après mauvaise réponse
+
+  // Relations
+  players     RoomPlayer[]
+  rounds      Round[]
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  lastActivityAt DateTime @default(now()) // Pour le nettoyage des rooms inactives
+
+  @@index([code])
+  @@index([lastActivityAt]) // Pour trouver rapidement les rooms expirées
+}
+
+// ========================
+// STATUT D'UNE ROOM
+// ========================
+
+enum RoomStatus {
+  WAITING    // Lobby, en attente de joueurs
+  COUNTDOWN  // Compte à rebours 3, 2, 1...
+  PLAYING    // Musique en cours
+  REVEAL     // Affichage de la bonne réponse
+  FINISHED   // Partie terminée
+}
+
+// ========================
+// RELATION JOUEUR-ROOM
+// ========================
+
+model RoomPlayer {
+  id       String  @id @default(cuid())
+  roomId   String
+  userId   String
+  isReady  Boolean @default(false)
+  isActive Boolean @default(true) // false si déconnecté
+
+  // Tracking pour la reconnexion
+  sessionToken String? // Token pour reconnecter le joueur après déconnexion
+  lastSeenAt   DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([sessionToken]) // Pour retrouver un joueur via son token
+}
+
+// ========================
+// MODÈLE ROUND
+// ========================
+
+model Round {
+  id          String @id @default(cuid())
+  roomId      String
+  roundNumber Int
+
+  // Données du morceau (provenant de Deezer API)
+  trackId     String // ID Deezer du morceau
+  trackTitle  String
+  artistName  String
+  previewUrl  String // URL de l'extrait 30s
+  albumCover  String // URL pochette (pour le reveal)
+
+  // Timestamps du round
+  startedAt   DateTime?
+  endedAt     DateTime?
+
+  // Relations
+  room   Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  scores Score[]
+  attempts AnswerAttempt[] // Toutes les tentatives de réponse
+
+  @@unique([roomId, roundNumber])
+  @@index([roomId])
+}
+
+// ========================
+// MODÈLE SCORE
+// ========================
+
+model Score {
+  id            String   @id @default(cuid())
+  userId        String
+  roundId       String
+  points        Int      @default(0)
+  answeredInMs  Int?     // Temps de réponse en millisecondes (null si pas trouvé)
+  wasCorrect    Boolean  @default(false)
+  answerGiven   String?  // La première réponse correcte donnée
+  position      Int?     // Position (1, 2, 3...) - null si pas trouvé
+  attempts      Int      @default(1) // Nombre de tentatives avant de trouver
+
+  // Bonus appliqués
+  basePoints     Int @default(0)
+  timeBonus      Int @default(0)
+  streakBonus    Int @default(0)
+  positionBonus  Int @default(0)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roundId])
+  @@index([roundId])
+}
+
+// ========================
+// TENTATIVES DE RÉPONSE
+// ========================
+
+// Stocke toutes les tentatives de réponse pour analytics et anti-triche
+model AnswerAttempt {
+  id         String   @id @default(cuid())
+  roundId    String
+  userId     String
+  answer     String   // La réponse donnée
+  wasCorrect Boolean
+  timeTakenMs Int     // Temps depuis le début du round
+  timestamp  DateTime @default(now())
+
+  round Round @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, userId])
+  @@index([timestamp])
+}
