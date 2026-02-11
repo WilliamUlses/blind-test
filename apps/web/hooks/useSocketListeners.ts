@@ -101,6 +101,16 @@ export function useSocketListeners() {
             updateServerTimeOffset(serverTime);
         };
 
+        const onGameOver = () => {
+            // The server also emits room_updated with FINISHED status via emitRoomUpdate(),
+            // so the roomState will be updated by onRoomUpdated. This handler exists
+            // as an explicit acknowledgement of the game_over event.
+        };
+
+        const onNewMessage = (data: { playerId: string; pseudo: string; message: string; timestamp: number }) => {
+            useGameStore.getState().addChatMessage(data);
+        };
+
         const onEmoteReceived = ({ playerId, pseudo, emote }: any) => {
             useGameStore.getState().addEmote({ playerId, pseudo, emote });
         };
@@ -120,7 +130,9 @@ export function useSocketListeners() {
         socket.on('round_start', onRoundStart);
         socket.on('answer_result', onAnswerResult);
         socket.on('round_end', onRoundEnd);
+        socket.on('game_over', onGameOver);
         socket.on('time_sync', onTimeSync);
+        socket.on('new_message', onNewMessage);
         socket.on('emote_received', onEmoteReceived);
         socket.on('error', onError);
 
@@ -136,7 +148,9 @@ export function useSocketListeners() {
             socket.off('round_start', onRoundStart);
             socket.off('answer_result', onAnswerResult);
             socket.off('round_end', onRoundEnd);
+            socket.off('game_over', onGameOver);
             socket.off('time_sync', onTimeSync);
+            socket.off('new_message', onNewMessage);
             socket.off('emote_received', onEmoteReceived);
             socket.off('error', onError);
         };

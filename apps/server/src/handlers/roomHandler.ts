@@ -13,6 +13,7 @@ import {
   type ErrorCode,
 } from '../../../../packages/shared/types';
 import { createGameManager, gameManagers, deleteGameManager } from './gameHandler';
+import { isRateLimited } from '../middlewares/rateLimiter';
 
 /**
  * Map des timeouts de déconnexion par playerId
@@ -459,6 +460,55 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
       // Le manager émet automatiquement room_updated
     } catch (error) {
       console.error('Error in toggle_ready:', error);
+      sendError(socket, 'SERVER_ERROR');
+    }
+  });
+
+  /**
+   * Envoyer un message dans le chat du lobby
+   */
+  socket.on('send_message', (data: { message: string }) => {
+    try {
+      const roomCode = socket.data.roomCode;
+      const playerId = socket.data.playerId;
+      const pseudo = socket.data.pseudo;
+
+      if (!roomCode || !playerId || !pseudo) {
+        return sendError(socket, 'PLAYER_NOT_IN_ROOM');
+      }
+
+      const { message } = data;
+
+      // Validation
+      if (!message || typeof message !== 'string' || !message.trim()) {
+        return;
+      }
+
+      const trimmed = message.trim();
+
+      if (trimmed.length > GAME_CONSTANTS.MAX_MESSAGE_LENGTH) {
+        return sendError(socket, 'RATE_LIMITED', 'Message trop long');
+      }
+
+      // Sanitize against XSS
+      if (/[<>&"']/.test(trimmed)) {
+        return sendError(socket, 'RATE_LIMITED', 'Caractères non autorisés');
+      }
+
+      // Rate limit: 3 messages per second
+      if (isRateLimited(socket.id, 'send_message', GAME_CONSTANTS.MAX_MESSAGES_PER_SECOND, 1000)) {
+        return sendError(socket, 'RATE_LIMITED');
+      }
+
+      // Broadcast to room
+      io.to(roomCode).emit('new_message', {
+        playerId,
+        pseudo,
+        message: trimmed,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      console.error('Error in send_message:', error);
       sendError(socket, 'SERVER_ERROR');
     }
   });

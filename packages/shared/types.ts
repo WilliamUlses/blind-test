@@ -158,6 +158,9 @@ export interface ClientToServerEvents {
 
   request_next_round: () => void; // Host only
 
+  // Game lifecycle
+  return_to_lobby: () => void;
+
   // Chat
   send_message: (data: { message: string }) => void;
 

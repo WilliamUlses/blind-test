@@ -47,6 +47,13 @@ interface CurrentRound {
 /**
  * État global du store
  */
+interface ChatMessage {
+  playerId: string;
+  pseudo: string;
+  message: string;
+  timestamp: number;
+}
+
 interface EmoteEntry {
   id: string;
   playerId: string;
@@ -63,6 +70,9 @@ interface GameStore {
 
   // Local player state
   localPlayer: LocalPlayerState;
+
+  // Chat
+  chatMessages: ChatMessage[];
 
   // Emotes
   emotes: EmoteEntry[];
@@ -87,6 +97,7 @@ interface GameStore {
   setLocalPlayerFoundPart: (part: 'artist' | 'title' | 'both') => void;
   addAnswerAttempt: (text: string) => void;
   markLastAttemptResult: (correct: boolean, foundPart?: 'artist' | 'title' | 'both') => void;
+  addChatMessage: (msg: ChatMessage) => void;
   addEmote: (data: { playerId: string; pseudo: string; emote: string }) => void;
   clearEmotes: () => void;
   setConnectionStatus: (isConnected: boolean, isConnecting?: boolean) => void;
@@ -123,6 +134,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentRound: null,
   lastRoundResult: null,
   localPlayer: initialLocalPlayer,
+  chatMessages: [],
   emotes: [],
   isConnecting: false,
   isConnected: false,
@@ -131,7 +143,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Actions
   setRoomState: (roomState: RoomState) => {
-    set({ roomState, error: null });
+    // When returning to lobby (WAITING), clear game-round data for a fresh start
+    if (roomState.status === 'WAITING') {
+      set({ roomState, error: null, currentRound: null, lastRoundResult: null });
+    } else {
+      set({ roomState, error: null });
+    }
   },
 
   setCurrentRound: (roundData: RoundData) => {
@@ -263,6 +280,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  addChatMessage: (msg: ChatMessage) => {
+    set((state) => ({
+      chatMessages: [...state.chatMessages.slice(-99), msg], // Keep last 100
+    }));
+  },
+
   addEmote: (data: { playerId: string; pseudo: string; emote: string }) => {
     const entry: EmoteEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -306,6 +329,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentRound: null,
       lastRoundResult: null,
       localPlayer: initialLocalPlayer,
+      chatMessages: [],
       emotes: [],
       isConnecting: false,
       isConnected: false,
@@ -348,4 +372,5 @@ export const useConnectionStatus = () =>
     isConnected: state.isConnected,
     isConnecting: state.isConnecting,
   }));
+export const useChatMessages = () => useGameStore((state) => state.chatMessages);
 export const useGameError = () => useGameStore((state) => state.error);

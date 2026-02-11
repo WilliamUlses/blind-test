@@ -13,13 +13,15 @@ import { useRoomState, useIsHost, useGamePhase, useLocalPlayer } from '../../../
 import { useGameStore } from '../../../stores/gameStore';
 import { LobbySettings } from '../../../components/game/LobbySettings';
 import { SharePanel } from '../../../components/game/SharePanel';
+import { LobbyChat } from '../../../components/game/LobbyChat';
+import { X } from 'lucide-react';
 
 export default function LobbyPage() {
   const params = useParams();
   const router = useRouter();
   const roomCode = params.roomCode as string;
 
-  const { startGame, toggleReady, leaveRoom, joinRoom, updateSettings } = useGameActions();
+  const { startGame, toggleReady, leaveRoom, joinRoom, updateSettings, kickPlayer } = useGameActions();
   const roomState = useRoomState();
   const isHost = useIsHost();
   const gamePhase = useGamePhase();
@@ -41,6 +43,9 @@ export default function LobbyPage() {
   useEffect(() => {
     if (gamePhase === 'COUNTDOWN' || gamePhase === 'PLAYING') {
       router.push(`/game/${roomCode}`);
+    }
+    if (gamePhase === 'FINISHED') {
+      router.push(`/results/${roomCode}`);
     }
   }, [gamePhase, roomCode, router]);
 
@@ -204,10 +209,26 @@ export default function LobbyPage() {
                           {player.isReady ? 'Ready' : 'Not Ready'}
                         </p>
                       </div>
+
+                      {/* Kick button - host only, not on self */}
+                      {isHost && player.id !== localPlayer?.id && (
+                        <button
+                          onClick={() => kickPlayer(player.id)}
+                          className="p-1.5 rounded-lg bg-white/5 text-white/30 hover:bg-red-500/20 hover:text-red-400 transition-all"
+                          aria-label={`Exclure ${player.pseudo}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
+            </div>
+
+            {/* Lobby Chat */}
+            <div className="mt-6">
+              <LobbyChat />
             </div>
           </div>
 

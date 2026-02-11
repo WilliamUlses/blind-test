@@ -63,6 +63,11 @@ export function useGameActions() {
         socket.emit('toggle_pause');
     }, []);
 
+    const returnToLobby = useCallback(() => {
+        const socket = getSocket();
+        socket.emit('return_to_lobby');
+    }, []);
+
     const sendEmote = useCallback((emote: string) => {
         const socket = getSocket();
         socket.emit('send_emote', { emote });
@@ -79,6 +84,7 @@ export function useGameActions() {
         submitAnswer,
         sendMessage,
         togglePause,
+        returnToLobby,
         sendEmote,
     };
 }

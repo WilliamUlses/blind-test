@@ -665,6 +665,45 @@ export class GameManager {
   }
 
   /**
+   * Reset la room pour une nouvelle partie (retour au lobby)
+   */
+  public resetForNewGame(): void {
+    // Clear timers
+    if (this.roundTimer) {
+      clearTimeout(this.roundTimer);
+      this.roundTimer = null;
+    }
+    if (this.phaseTimer) {
+      clearTimeout(this.phaseTimer);
+      this.phaseTimer = null;
+    }
+
+    // Reset game state
+    this.roomState.status = 'WAITING';
+    this.roomState.currentRound = 0;
+    this.roomState.isPaused = false;
+
+    // Reset all players
+    this.roomState.players.forEach((player) => {
+      player.score = 0;
+      player.streak = 0;
+      player.isReady = false;
+      player.hasAnsweredCorrectly = false;
+      player.foundArtist = false;
+      player.foundTitle = false;
+      player.cooldownUntil = null;
+      player.hasVotedToPause = false;
+    });
+
+    // Clear internal state
+    this.currentRound = null;
+    this.playerCooldowns.clear();
+    this.remainingTimeMs = 0;
+
+    this.emitRoomUpdate();
+  }
+
+  /**
    * Nettoie les ressources (timers, etc.)
    */
   cleanup(): void {

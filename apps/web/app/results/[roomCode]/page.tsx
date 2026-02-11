@@ -7,8 +7,9 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useRoomState } from '../../../stores/gameStore';
-import { useMemo, useState, useCallback } from 'react';
+import { useRoomState, useIsHost, useGamePhase } from '../../../stores/gameStore';
+import { useGameActions } from '../../../hooks/useGameActions';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { Share2, Copy, Check, RotateCcw, Home } from 'lucide-react';
 
 const MEDAL_COLORS = [
@@ -24,7 +25,17 @@ export default function ResultsPage() {
   const router = useRouter();
   const roomCode = params.roomCode as string;
   const roomState = useRoomState();
+  const isHost = useIsHost();
+  const gamePhase = useGamePhase();
+  const { returnToLobby } = useGameActions();
   const [copied, setCopied] = useState(false);
+
+  // When the room resets to WAITING (host clicked replay), redirect everyone to lobby
+  useEffect(() => {
+    if (gamePhase === 'WAITING') {
+      router.push(`/lobby/${roomCode}`);
+    }
+  }, [gamePhase, roomCode, router]);
 
   const sortedPlayers = useMemo(() => {
     if (!roomState) return [];
@@ -176,13 +187,20 @@ export default function ResultsPage() {
           className="space-y-3"
         >
           {/* Play Again */}
-          <button
-            onClick={() => router.push(`/lobby/${roomCode}`)}
-            className="w-full px-8 py-5 bg-gradient-to-r from-primary to-secondary rounded-2xl text-white text-lg font-black hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-wider shadow-lg shadow-primary/25 flex items-center justify-center gap-3"
-          >
-            <RotateCcw className="w-5 h-5" />
-            Rejouer
-          </button>
+          {isHost ? (
+            <button
+              onClick={returnToLobby}
+              className="w-full px-8 py-5 bg-gradient-to-r from-primary to-secondary rounded-2xl text-white text-lg font-black hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-wider shadow-lg shadow-primary/25 flex items-center justify-center gap-3"
+            >
+              <RotateCcw className="w-5 h-5" />
+              Rejouer
+            </button>
+          ) : (
+            <div className="w-full px-8 py-5 bg-white/5 border border-white/10 rounded-2xl text-white/40 text-lg font-black text-center uppercase tracking-wider flex items-center justify-center gap-3">
+              <RotateCcw className="w-5 h-5 animate-spin" style={{ animationDuration: '3s' }} />
+              {"En attente de l'hôte..."}
+            </div>
+          )}
 
           <div className="flex gap-3">
             {/* Share */}

@@ -159,6 +159,39 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
   });
 
   /**
+   * Retourner au lobby après une partie terminée (host only)
+   */
+  socket.on('return_to_lobby', () => {
+    try {
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) {
+        return sendError(socket, 'PLAYER_NOT_IN_ROOM');
+      }
+
+      const manager = gameManagers.get(roomCode);
+      if (!manager) {
+        return sendError(socket, 'ROOM_NOT_FOUND');
+      }
+
+      const state = manager.getState();
+
+      if (socket.data.playerId !== state.hostId) {
+        return sendError(socket, 'NOT_HOST');
+      }
+
+      if (state.status !== 'FINISHED') {
+        return sendError(socket, 'SERVER_ERROR', 'La partie n\'est pas terminée');
+      }
+
+      manager.resetForNewGame();
+      // resetForNewGame() calls emitRoomUpdate() which broadcasts to all clients
+    } catch (error) {
+      console.error('Error in return_to_lobby:', error);
+      sendError(socket, 'SERVER_ERROR');
+    }
+  });
+
+  /**
    * Envoyer un emote (réaction emoji)
    */
   socket.on('send_emote', (data: { emote: string }) => {
