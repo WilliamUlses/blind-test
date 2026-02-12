@@ -117,8 +117,20 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
       // Tracker la tentative
       defaultRateLimiter.trackAnswerAttempt(socket.id, roomCode, currentRound);
 
-      // Soumettre la réponse au GameManager
-      const result = await manager.submitAnswer(playerId, answer, timestamp);
+      // Route vers la bonne méthode selon le mode de jeu
+      const state = manager.getState();
+      let result;
+
+      if (state.settings.gameMode === 'timeline') {
+        // En mode Timeline, answer = index de placement (parsé en int)
+        const insertIndex = parseInt(answer, 10);
+        if (isNaN(insertIndex)) {
+          return sendError(socket, 'RATE_LIMITED', 'Position invalide');
+        }
+        result = manager.submitTimelineAnswer(playerId, insertIndex, timestamp);
+      } else {
+        result = await manager.submitAnswer(playerId, answer, timestamp);
+      }
 
       if (!result.success) {
         return sendError(socket, result.error as ErrorCode);

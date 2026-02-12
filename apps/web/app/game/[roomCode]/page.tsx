@@ -8,7 +8,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useGamePhase, useCurrentRound, useRoomState, useGameStore, useConnectionStatus } from '../../../stores/gameStore';
+import { useGamePhase, useCurrentRound, useRoomState, useGameStore, useConnectionStatus, useGameMode } from '../../../stores/gameStore';
 import { useGameActions } from '../../../hooks/useGameActions';
 import { Countdown321 } from '../../../components/game/Countdown321';
 import { MusicPlayer } from '../../../components/game/MusicPlayer';
@@ -19,6 +19,9 @@ import { useSyncedAudioPlayer } from '../../../hooks/useAudioPlayer';
 import { RevealView } from '../../../components/game/RevealView';
 import { EmoteBar } from '../../../components/game/EmoteBar';
 import { EmoteOverlay } from '../../../components/game/EmoteOverlay';
+import { TimelinePlacement } from '../../../components/game/TimelinePlacement';
+import { TimelineView } from '../../../components/game/TimelineView';
+import { GAME_CONSTANTS } from '../../../../../packages/shared/types';
 
 // Helper component for Rejoin
 function JoinButton({ pseudo, roomCode, onJoin }: { pseudo: string, roomCode: string, onJoin: () => void }) {
@@ -50,7 +53,10 @@ export default function GamePage() {
   const audioPlayer = useSyncedAudioPlayer();
   const serverTimeOffset = useGameStore((state) => state.serverTimeOffset);
   const { isConnected, isConnecting } = useConnectionStatus();
+  const gameMode = useGameMode();
+  const isTimeline = gameMode === 'timeline';
   const [showVolume, setShowVolume] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [prevVolume, setPrevVolume] = useState(0.8);
   const volumeRef = useRef<HTMLDivElement>(null);
 
@@ -193,14 +199,29 @@ export default function GamePage() {
               title={isConnected ? 'Connected' : isConnecting ? 'Reconnecting...' : 'Disconnected'}
             />
 
-            {/* Round Info — compact on mobile, full on desktop */}
-            <div className="glass-panel px-3 py-2 md:px-6 md:py-3 rounded-full flex items-center gap-2 md:gap-4">
-              <span className="text-white/60 text-[10px] md:text-xs font-bold uppercase tracking-widest hidden md:inline">Round</span>
-              <div className="flex items-baseline gap-1">
-                <span className="text-primary font-black text-sm md:text-xl">{currentRound?.roundNumber || '-'}</span>
-                <span className="text-white/40 font-bold text-[10px] md:text-sm">/ {roomState.settings.totalRounds}</span>
+            {/* Round Info — conditional for timeline */}
+            {isTimeline ? (
+              <div className="glass-panel px-3 py-2 md:px-6 md:py-3 rounded-full flex items-center gap-2 md:gap-4">
+                <span className="text-amber-500/60 text-[10px] md:text-xs font-bold uppercase tracking-widest hidden md:inline">Cards</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-amber-500 font-black text-sm md:text-xl">
+                    {(() => {
+                      const me = roomState.players.find(p => p.id === useGameStore.getState().localPlayer?.id);
+                      return me?.timelineCards?.length || 0;
+                    })()}
+                  </span>
+                  <span className="text-white/40 font-bold text-[10px] md:text-sm">/ {roomState.settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN}</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="glass-panel px-3 py-2 md:px-6 md:py-3 rounded-full flex items-center gap-2 md:gap-4">
+                <span className="text-white/60 text-[10px] md:text-xs font-bold uppercase tracking-widest hidden md:inline">Round</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-primary font-black text-sm md:text-xl">{currentRound?.roundNumber || '-'}</span>
+                  <span className="text-white/40 font-bold text-[10px] md:text-sm">/ {roomState.settings.totalRounds}</span>
+                </div>
+              </div>
+            )}
 
             {/* Volume Control */}
             <div className="relative" ref={volumeRef}>
@@ -273,7 +294,15 @@ export default function GamePage() {
 
             {/* Leave Button */}
             <button
-              onClick={() => { leaveRoom(); router.push('/'); }}
+              onClick={() => {
+                const isActive = gamePhase === 'PLAYING' || gamePhase === 'COUNTDOWN' || gamePhase === 'REVEAL';
+                if (isActive) {
+                  setShowLeaveConfirm(true);
+                } else {
+                  leaveRoom();
+                  router.push('/');
+                }
+              }}
               className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all text-xs md:text-base"
               aria-label="Leave game"
               title="Leave Game"
@@ -289,17 +318,24 @@ export default function GamePage() {
 
             {/* Visualizer / Player */}
             <div className="w-full max-w-[250px] md:max-w-lg aspect-square flex items-center justify-center relative mx-auto">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-full blur-3xl animate-pulse-slow" />
+              <div className={`absolute inset-0 ${isTimeline ? 'bg-gradient-to-br from-amber-500/20 to-orange-500/20' : 'bg-gradient-to-br from-primary/20 to-secondary/20'} rounded-full blur-3xl animate-pulse-slow`} />
               <MusicPlayer isPlaying={audioPlayer.isPlaying} />
             </div>
 
             {/* Answer Input Area */}
             <div className="w-full max-w-2xl relative z-20">
               {gamePhase === 'PLAYING' ? (
-                <>
-                  <AnswerInput placeholder="Type Artist + Title..." />
-                  <EmoteBar onEmote={sendEmote} />
-                </>
+                isTimeline ? (
+                  <>
+                    <TimelinePlacement />
+                    <EmoteBar onEmote={sendEmote} />
+                  </>
+                ) : (
+                  <>
+                    <AnswerInput placeholder="Type Artist + Title..." />
+                    <EmoteBar onEmote={sendEmote} />
+                  </>
+                )
               ) : gamePhase === 'REVEAL' ? (
                 <RevealView />
               ) : (
@@ -310,18 +346,42 @@ export default function GamePage() {
             </div>
           </div>
 
-          {/* Sidebar Scoreboard */}
+          {/* Sidebar */}
           <div className="lg:col-span-4 h-full max-h-[300px] lg:max-h-[600px] glass-panel rounded-3xl p-4 md:p-6 overflow-hidden flex flex-col">
             <h3 className="text-white/60 text-xs font-bold uppercase tracking-widest mb-6 flex items-center gap-2">
-              Leaderboard
+              {isTimeline ? 'Timeline' : 'Leaderboard'}
               <span className="flex-1 h-px bg-white/10"></span>
             </h3>
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar" aria-live="polite">
-              <ScoreBoard />
+              {isTimeline ? <TimelineView /> : <ScoreBoard />}
             </div>
           </div>
         </div>
       </div>
+      {/* LEAVE CONFIRMATION OVERLAY */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center">
+          <div className="glass-panel p-8 rounded-3xl text-center max-w-sm w-full animate-scale-up">
+            <h2 className="text-2xl font-black text-white mb-3 tracking-tight">Quitter la partie ?</h2>
+            <p className="text-white/60 mb-8 font-medium text-sm">Ta progression sera perdue.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLeaveConfirm(false)}
+                className="flex-1 px-6 py-3 bg-white/10 text-white rounded-xl font-bold uppercase tracking-wider hover:bg-white/20 transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => { leaveRoom(); router.push('/'); }}
+                className="flex-1 px-6 py-3 bg-red-500 text-white rounded-xl font-bold uppercase tracking-wider hover:bg-red-600 transition-all"
+              >
+                Quitter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PAUSE OVERLAY */}
       {roomState.isPaused && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center">

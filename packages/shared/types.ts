@@ -4,6 +4,22 @@
  */
 
 // ========================
+// GAME MODES
+// ========================
+
+export type GameMode = 'blind-test' | 'timeline';
+
+/**
+ * Carte sur la frise chronologique d'un joueur (mode Timeline)
+ */
+export interface TimelineCard {
+  trackTitle: string;
+  artistName: string;
+  albumCover: string;
+  releaseYear: number;
+}
+
+// ========================
 // ENTITÉS DE BASE
 // ========================
 
@@ -23,6 +39,7 @@ export interface Player {
   foundTitle: boolean; // A trouvé le titre
   cooldownUntil: number | null; // Timestamp jusqu'auquel le joueur est en cooldown (null si pas de cooldown)
   hasVotedToPause: boolean; // A voté pour mettre en pause
+  timelineCards: TimelineCard[]; // Cartes accumulées en mode Timeline
 }
 
 /**
@@ -53,6 +70,8 @@ export interface GameSettings {
   wrongAnswerCooldownMs: number; // Cooldown après une mauvaise réponse (default: 2000)
   difficulty?: 'easy' | 'medium' | 'hard'; // Preset (cosmetic, actual values in other fields)
   isSoloMode?: boolean; // Solo practice mode (single player allowed)
+  gameMode: GameMode; // 'blind-test' | 'timeline'
+  timelineCardsToWin: number; // Nombre de cartes pour gagner en mode Timeline (default 10)
 }
 
 /**
@@ -63,6 +82,11 @@ export interface RoundData {
   previewUrl: string;          // URL audio Deezer
   totalRounds: number;
   startTimestamp: number;      // Date.now() du serveur pour synchronisation
+  // Timeline mode fields
+  gameMode?: GameMode;
+  trackTitle?: string;         // Visible pendant le round en timeline
+  artistName?: string;
+  albumCover?: string;
 }
 
 /**
@@ -74,6 +98,7 @@ export interface RoundResult {
   artistName: string;
   albumCover: string;
   playerResults: PlayerRoundResult[];
+  releaseYear?: number; // Année de sortie (affiché en reveal pour le mode Timeline)
 }
 
 /**
@@ -239,6 +264,20 @@ export interface ServerToClientEvents {
   // Emotes
   emote_received: (data: { playerId: string; pseudo: string; emote: string }) => void;
 
+  // Timeline mode
+  timeline_card_added: (data: {
+    playerId: string;
+    pseudo: string;
+    card: TimelineCard;
+    totalCards: number;
+  }) => void;
+
+  timeline_winner: (data: {
+    playerId: string;
+    pseudo: string;
+    totalCards: number;
+  }) => void;
+
   // Errors
   error: (data: { code: ErrorCode; message: string }) => void;
 }
@@ -338,6 +377,11 @@ export const GAME_CONSTANTS = {
 
   // Emotes
   VALID_EMOTES: ['🔥', '👏', '😂', '😮', '💀', '❤️', '🎵', '⚡'] as string[],
+
+  // Timeline mode
+  TIMELINE_CARDS_TO_WIN: 10,
+  TIMELINE_MIN_YEAR: 1960,
+  TIMELINE_MAX_YEAR: 2024,
 } as const;
 
 /**

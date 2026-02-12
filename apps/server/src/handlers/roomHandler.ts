@@ -78,6 +78,7 @@ function createPlayer(
     foundTitle: false,
     cooldownUntil: null,
     hasVotedToPause: false,
+    timelineCards: [],
   };
 }
 
@@ -173,6 +174,8 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
         acceptArtistOnly: false,
         acceptTitleOnly: false,
         wrongAnswerCooldownMs: GAME_CONSTANTS.WRONG_ANSWER_COOLDOWN_MS,
+        gameMode: 'blind-test',
+        timelineCardsToWin: GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN,
       };
 
       // Fusionner avec les settings personnalisés

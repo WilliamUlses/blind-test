@@ -7,7 +7,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useRoomState, useIsHost, useGamePhase } from '../../../stores/gameStore';
+import { useRoomState, useIsHost, useGamePhase, useGameMode } from '../../../stores/gameStore';
 import { useGameActions } from '../../../hooks/useGameActions';
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import { Share2, Copy, Check, RotateCcw, Home } from 'lucide-react';
@@ -27,7 +27,9 @@ export default function ResultsPage() {
   const roomState = useRoomState();
   const isHost = useIsHost();
   const gamePhase = useGamePhase();
-  const { returnToLobby } = useGameActions();
+  const { returnToLobby, leaveRoom } = useGameActions();
+  const gameMode = useGameMode();
+  const isTimeline = gameMode === 'timeline';
   const [copied, setCopied] = useState(false);
 
   // When the room resets to WAITING (host clicked replay), redirect everyone to lobby
@@ -39,8 +41,12 @@ export default function ResultsPage() {
 
   const sortedPlayers = useMemo(() => {
     if (!roomState) return [];
-    return [...roomState.players].sort((a, b) => b.score - a.score);
-  }, [roomState]);
+    return [...roomState.players].sort((a, b) =>
+      isTimeline
+        ? b.timelineCards.length - a.timelineCards.length
+        : b.score - a.score
+    );
+  }, [roomState, isTimeline]);
 
   const top3 = sortedPlayers.slice(0, 3);
   const others = sortedPlayers.slice(3);
@@ -48,8 +54,11 @@ export default function ResultsPage() {
   const shareText = useMemo(() => {
     if (sortedPlayers.length === 0) return '';
     const winner = sortedPlayers[0];
+    if (isTimeline) {
+      return `🎵 Timeline Results!\n🏆 ${winner.pseudo} — ${winner.timelineCards.length} cards\nRoom: ${roomCode}`;
+    }
     return `🎵 Blind Test Results!\n🏆 ${winner.pseudo} — ${winner.score.toLocaleString()} pts\nRoom: ${roomCode}`;
-  }, [sortedPlayers, roomCode]);
+  }, [sortedPlayers, roomCode, isTimeline]);
 
   const handleShare = useCallback(async () => {
     if (navigator.share) {
@@ -93,7 +102,9 @@ export default function ResultsPage() {
           className="mb-12 text-center"
         >
           <h1 className="font-display text-4xl md:text-6xl font-black mb-3 tracking-tighter">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
+            <span className={`text-transparent bg-clip-text bg-gradient-to-r ${
+              isTimeline ? 'from-amber-400 to-orange-400' : 'from-primary to-secondary'
+            }`}>
               Résultats
             </span>
           </h1>
@@ -131,10 +142,10 @@ export default function ResultsPage() {
                   <p className={`font-display text-2xl md:text-3xl font-black ${
                     index === 0 ? 'text-yellow-400' : index === 1 ? 'text-gray-300' : 'text-amber-600'
                   }`}>
-                    {player.score.toLocaleString()}
+                    {isTimeline ? player.timelineCards.length : player.score.toLocaleString()}
                   </p>
                   <p className="text-white/40 text-xs font-bold uppercase tracking-wider">
-                    points
+                    {isTimeline ? 'cartes' : 'points'}
                   </p>
                 </div>
               </div>
@@ -171,7 +182,10 @@ export default function ResultsPage() {
                     </span>
                   </div>
                   <span className="text-white/60 font-mono text-sm">
-                    {player.score.toLocaleString()} pts
+                    {isTimeline
+                      ? `${player.timelineCards.length} cartes`
+                      : `${player.score.toLocaleString()} pts`
+                    }
                   </span>
                 </motion.div>
               ))}
@@ -227,7 +241,7 @@ export default function ResultsPage() {
 
             {/* Back to Home */}
             <button
-              onClick={() => router.push('/')}
+              onClick={() => { leaveRoom(); router.push('/'); }}
               className="flex-1 px-6 py-4 bg-white/5 border border-white/10 rounded-2xl text-white/60 font-bold hover:bg-white/10 hover:text-white hover:border-white/20 transition-all flex items-center justify-center gap-2"
             >
               <Home className="w-4 h-4" />

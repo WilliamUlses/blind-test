@@ -115,6 +115,14 @@ export function useSocketListeners() {
             useGameStore.getState().addEmote({ playerId, pseudo, emote });
         };
 
+        const onTimelineCardAdded = () => {
+            // room_updated will sync the player's timelineCards via onRoomUpdated
+        };
+
+        const onTimelineWinner = () => {
+            // game_over + room_updated handle the transition
+        };
+
         const onError = ({ code, message }: any) => {
             setError({ code, message });
         };
@@ -134,6 +142,8 @@ export function useSocketListeners() {
         socket.on('time_sync', onTimeSync);
         socket.on('new_message', onNewMessage);
         socket.on('emote_received', onEmoteReceived);
+        socket.on('timeline_card_added', onTimelineCardAdded);
+        socket.on('timeline_winner', onTimelineWinner);
         socket.on('error', onError);
 
         // Cleanup
@@ -152,6 +162,8 @@ export function useSocketListeners() {
             socket.off('time_sync', onTimeSync);
             socket.off('new_message', onNewMessage);
             socket.off('emote_received', onEmoteReceived);
+            socket.off('timeline_card_added', onTimelineCardAdded);
+            socket.off('timeline_winner', onTimelineWinner);
             socket.off('error', onError);
         };
     }, []); // Dépendances vides pour n'exécuter qu'au montage

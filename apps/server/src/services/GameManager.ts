@@ -14,6 +14,7 @@ import {
   RoundResult,
   PlayerRoundResult,
   AnswerAttempt,
+  TimelineCard,
   GAME_CONSTANTS,
 } from '../../../../packages/shared/types';
 import { AnswerChecker } from './AnswerChecker';
@@ -30,12 +31,14 @@ interface RoundInfo {
   artistName: string;
   previewUrl: string;
   albumCover: string;
+  releaseYear: number;
   startTimestamp: number;
   endTimestamp: number;
   playersWhoFound: Set<string>; // IDs des joueurs qui ont tout trouvé (artiste + titre)
   playerPositions: Map<string, number>; // Position de chaque joueur (1, 2, 3...)
   playerRoundPoints: Map<string, number>; // Points gagnés par joueur dans ce round
   attempts: AnswerAttempt[]; // Toutes les tentatives de réponse
+  timelineAnswered: Set<string>; // IDs des joueurs qui ont soumis une réponse en mode Timeline (1 par round)
 }
 
 /**
@@ -231,6 +234,12 @@ export class GameManager {
     if (sanitized.isSoloMode !== undefined) {
       sanitized.isSoloMode = Boolean(sanitized.isSoloMode);
     }
+    if (sanitized.gameMode !== undefined) {
+      sanitized.gameMode = sanitized.gameMode === 'timeline' ? 'timeline' : 'blind-test';
+    }
+    if (sanitized.timelineCardsToWin !== undefined) {
+      sanitized.timelineCardsToWin = Math.max(3, Math.min(20, sanitized.timelineCardsToWin));
+    }
 
     this.roomState.settings = { ...this.roomState.settings, ...sanitized };
 
@@ -261,6 +270,11 @@ export class GameManager {
       return { success: false, error: 'GAME_ALREADY_STARTED' };
     }
 
+    // Reset iTunes service state for new game
+    itunesService.resetUsedArtists();
+
+    const isTimeline = this.roomState.settings.gameMode === 'timeline';
+
     // Initialiser les scores
     this.roomState.players.forEach((player) => {
       player.score = 0;
@@ -268,7 +282,25 @@ export class GameManager {
       player.hasAnsweredCorrectly = false;
       player.foundArtist = false;
       player.foundTitle = false;
+      player.timelineCards = [];
     });
+
+    // En mode timeline, le nombre de rounds est illimité (on joue jusqu'à ce qu'un joueur gagne)
+    if (isTimeline) {
+      this.roomState.totalRounds = 999;
+
+      // Donner une carte de référence initiale à chaque joueur
+      const refTrack = await this.getiTunesTrack() || this.generateMockTrack(0);
+      const refCard: TimelineCard = {
+        trackTitle: refTrack.trackTitle,
+        artistName: refTrack.artistName,
+        albumCover: refTrack.albumCover,
+        releaseYear: refTrack.releaseYear,
+      };
+      this.roomState.players.forEach((player) => {
+        player.timelineCards = [refCard];
+      });
+    }
 
     this.roomState.currentRound = 0;
     this.roomState.status = 'COUNTDOWN';
@@ -331,12 +363,14 @@ export class GameManager {
       artistName: track.artistName,
       previewUrl: track.previewUrl,
       albumCover: track.albumCover,
+      releaseYear: track.releaseYear,
       startTimestamp,
       endTimestamp: startTimestamp + roundDurationMs,
       playersWhoFound: new Set(),
       playerPositions: new Map(),
       playerRoundPoints: new Map(),
       attempts: [],
+      timelineAnswered: new Set(),
     };
 
     // Reset les flags de réponse
@@ -354,11 +388,18 @@ export class GameManager {
     this.emitRoomUpdate();
 
     // Émettre le démarrage du round
+    const isTimeline = this.roomState.settings.gameMode === 'timeline';
     const roundData: RoundData = {
       roundNumber: this.currentRound.roundNumber,
       previewUrl: this.currentRound.previewUrl,
       totalRounds: this.roomState.totalRounds,
       startTimestamp,
+      ...(isTimeline ? {
+        gameMode: 'timeline' as const,
+        trackTitle: this.currentRound.trackTitle,
+        artistName: this.currentRound.artistName,
+        albumCover: this.currentRound.albumCover,
+      } : {}),
     };
 
     this.io.to(this.roomCode).emit('round_start', roundData);
@@ -572,17 +613,118 @@ export class GameManager {
   }
 
   /**
+   * Traite un placement Timeline.
+   * Le joueur choisit un index d'insertion sur sa frise personnelle.
+   * On vérifie que l'année de la chanson est cohérente à cette position.
+   */
+  submitTimelineAnswer(
+    playerId: string,
+    insertIndex: number,
+    timestamp: number
+  ): { success: boolean; error?: string } {
+    if (this.roomState.status !== 'PLAYING' || !this.currentRound) {
+      return { success: false, error: 'ROUND_EXPIRED' };
+    }
+
+    const player = this.roomState.players.find((p) => p.id === playerId);
+    if (!player) {
+      return { success: false, error: 'PLAYER_NOT_IN_ROOM' };
+    }
+
+    // 1 seule réponse par round en mode Timeline
+    if (this.currentRound.timelineAnswered.has(playerId)) {
+      return { success: false, error: 'ALREADY_ANSWERED' };
+    }
+
+    this.currentRound.timelineAnswered.add(playerId);
+
+    const actualYear = this.currentRound.releaseYear;
+    const cards = player.timelineCards; // Already sorted by releaseYear
+
+    // Validate insertion position
+    const clampedIndex = Math.max(0, Math.min(insertIndex, cards.length));
+
+    const yearBefore = clampedIndex > 0 ? cards[clampedIndex - 1].releaseYear : -Infinity;
+    const yearAfter = clampedIndex < cards.length ? cards[clampedIndex].releaseYear : Infinity;
+
+    const isCorrect = actualYear >= yearBefore && actualYear <= yearAfter;
+
+    if (isCorrect) {
+      // Create the card and insert at the right position
+      const newCard: TimelineCard = {
+        trackTitle: this.currentRound.trackTitle,
+        artistName: this.currentRound.artistName,
+        albumCover: this.currentRound.albumCover,
+        releaseYear: actualYear,
+      };
+
+      // Insert in sorted position (cards are always sorted by year)
+      cards.splice(clampedIndex, 0, newCard);
+      player.hasAnsweredCorrectly = true;
+
+      // Notify all players
+      this.io.to(this.roomCode).emit('timeline_card_added', {
+        playerId,
+        pseudo: player.pseudo,
+        card: newCard,
+        totalCards: cards.length,
+      });
+
+      this.emitRoomUpdate();
+
+      // Check win condition
+      const cardsToWin = this.roomState.settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN;
+      if (cards.length >= cardsToWin) {
+        this.io.to(this.roomCode).emit('timeline_winner', {
+          playerId,
+          pseudo: player.pseudo,
+          totalCards: cards.length,
+        });
+
+        // End the round and game
+        if (this.roundTimer) {
+          clearTimeout(this.roundTimer);
+        }
+        this.endRound();
+        return { success: true };
+      }
+    }
+
+    // Notify the individual player of their result
+    this.io.to(playerId).emit('answer_result', {
+      correct: isCorrect,
+      pointsEarned: 0,
+      totalScore: player.score,
+      streak: 0,
+    });
+
+    // If all players have answered, end round early
+    if (this.currentRound.timelineAnswered.size >= this.roomState.players.length) {
+      if (this.roundTimer) {
+        clearTimeout(this.roundTimer);
+      }
+      this.endRound();
+    }
+
+    return { success: true };
+  }
+
+  /**
    * Termine le round en cours
    */
   private endRound(): void {
     if (!this.currentRound) return;
 
-    // Reset le streak des joueurs qui n'ont rien trouvé ce round
-    this.roomState.players.forEach((player) => {
-      if (!player.foundArtist && !player.foundTitle) {
-        player.streak = 0;
-      }
-    });
+    const isTimeline = this.roomState.settings.gameMode === 'timeline';
+
+    // Reset le streak des joueurs qui n'ont rien trouvé ce round (skip for timeline)
+    if (!isTimeline) {
+      this.roomState.players.forEach((player) => {
+        if (!player.foundArtist && !player.foundTitle) {
+          player.streak = 0;
+        }
+      });
+    }
 
     this.roomState.status = 'REVEAL';
     this.emitRoomUpdate();
@@ -618,14 +760,19 @@ export class GameManager {
       artistName: this.currentRound.artistName,
       albumCover: this.currentRound.albumCover,
       playerResults,
+      ...(isTimeline ? { releaseYear: this.currentRound.releaseYear } : {}),
     };
 
     // Émettre les résultats
     this.io.to(this.roomCode).emit('round_end', roundResult);
 
+    // Check timeline win condition
+    const cardsToWin = this.roomState.settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN;
+    const timelineWinner = isTimeline && this.roomState.players.some(p => p.timelineCards.length >= cardsToWin);
+
     // Attendre la durée de reveal avant de passer au round suivant ou de terminer
     this.phaseTimer = setTimeout(() => {
-      if (this.roomState.currentRound >= this.roomState.totalRounds) {
+      if (timelineWinner || this.roomState.currentRound >= this.roomState.totalRounds) {
         this.endGame();
       } else {
         this.roomState.status = 'COUNTDOWN';
@@ -649,8 +796,12 @@ export class GameManager {
   private endGame(): void {
     this.roomState.status = 'FINISHED';
 
-    // Trier les joueurs par score
-    const finalScores = [...this.roomState.players].sort((a, b) => b.score - a.score);
+    const isTimeline = this.roomState.settings.gameMode === 'timeline';
+
+    // Trier les joueurs par score (ou par nombre de cartes en timeline)
+    const finalScores = [...this.roomState.players].sort((a, b) =>
+      isTimeline ? b.timelineCards.length - a.timelineCards.length : b.score - a.score
+    );
 
     // Top 3
     const podium = finalScores.slice(0, 3);
@@ -693,12 +844,16 @@ export class GameManager {
       player.foundTitle = false;
       player.cooldownUntil = null;
       player.hasVotedToPause = false;
+      player.timelineCards = [];
     });
 
     // Clear internal state
     this.currentRound = null;
     this.playerCooldowns.clear();
     this.remainingTimeMs = 0;
+
+    // Reset iTunes service state for replay
+    itunesService.resetUsedArtists();
 
     this.emitRoomUpdate();
   }
@@ -724,6 +879,7 @@ export class GameManager {
     artistName: string;
     previewUrl: string;
     albumCover: string;
+    releaseYear: number;
   } {
     const mockTracks = [
       {
@@ -732,6 +888,7 @@ export class GameManager {
         artistName: 'Queen',
         previewUrl: 'https://cdns-preview-e.dzcdn.net/stream/mock1.mp3',
         albumCover: 'https://api.deezer.com/album/1/image',
+        releaseYear: 1975,
       },
       {
         trackId: '2',
@@ -739,6 +896,7 @@ export class GameManager {
         artistName: 'Michael Jackson',
         previewUrl: 'https://cdns-preview-e.dzcdn.net/stream/mock2.mp3',
         albumCover: 'https://api.deezer.com/album/2/image',
+        releaseYear: 1982,
       },
       {
         trackId: '3',
@@ -746,6 +904,7 @@ export class GameManager {
         artistName: 'Eagles',
         previewUrl: 'https://cdns-preview-e.dzcdn.net/stream/mock3.mp3',
         albumCover: 'https://api.deezer.com/album/3/image',
+        releaseYear: 1977,
       },
     ];
 

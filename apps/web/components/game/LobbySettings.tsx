@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import type { GameSettings } from '../../../../packages/shared/types';
+import type { GameSettings, GameMode } from '../../../../packages/shared/types';
+import { GAME_CONSTANTS } from '../../../../packages/shared/types';
 
 interface LobbySettingsProps {
   settings: GameSettings;
@@ -104,10 +105,27 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
     onUpdateSettings({ isSoloMode: solo });
   };
 
+  const handleGameMode = (mode: GameMode) => {
+    if (!isHost) return;
+    onUpdateSettings({ gameMode: mode });
+  };
+
+  const handleTimelineCards = (value: number) => {
+    if (!isHost) return;
+    onUpdateSettings({ timelineCardsToWin: value });
+  };
+
+  const gameMode = settings.gameMode || 'blind-test';
+  const isTimeline = gameMode === 'timeline';
+
   // Read-only display for non-host
   if (!isHost) {
     return (
       <div className="space-y-4">
+        <div className="flex justify-between items-center pb-3 border-b border-white/5">
+          <span className="text-white/60 text-sm">Game</span>
+          <span className="text-primary font-bold">{isTimeline ? 'Timeline' : 'Blind Test'}</span>
+        </div>
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
           <span className="text-white/60 text-sm">Mode</span>
           <span className="text-primary font-bold">{settings.isSoloMode ? 'Solo' : 'Multiplayer'}</span>
@@ -120,20 +138,29 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
           <span className="text-white/60 text-sm">Genre</span>
           <span className="text-primary font-bold">{settings.genre ? (ALL_GENRE_LABELS[settings.genre] || settings.genre) : 'Random'}</span>
         </div>
-        <div className="flex justify-between items-center pb-3 border-b border-white/5">
-          <span className="text-white/60 text-sm">Rounds</span>
-          <span className="text-primary font-bold text-xl">{settings.totalRounds}</span>
-        </div>
+        {isTimeline ? (
+          <div className="flex justify-between items-center pb-3 border-b border-white/5">
+            <span className="text-white/60 text-sm">Cards to Win</span>
+            <span className="text-primary font-bold text-xl">{settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN}</span>
+          </div>
+        ) : (
+          <div className="flex justify-between items-center pb-3 border-b border-white/5">
+            <span className="text-white/60 text-sm">Rounds</span>
+            <span className="text-primary font-bold text-xl">{settings.totalRounds}</span>
+          </div>
+        )}
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
           <span className="text-white/60 text-sm">Duration</span>
           <span className="text-primary font-bold text-xl">{settings.roundDurationMs / 1000}s</span>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-white/60 text-sm">Answer Mode</span>
-          <span className="text-primary font-bold capitalize">
-            {answerMode === 'both' ? 'Artist + Title' : answerMode === 'artist' ? 'Artist Only' : 'Title Only'}
-          </span>
-        </div>
+        {!isTimeline && (
+          <div className="flex justify-between items-center">
+            <span className="text-white/60 text-sm">Answer Mode</span>
+            <span className="text-primary font-bold capitalize">
+              {answerMode === 'both' ? 'Artist + Title' : answerMode === 'artist' ? 'Artist Only' : 'Title Only'}
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -141,10 +168,39 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
   // Interactive settings for host
   return (
     <div className="space-y-5">
-      {/* Game Mode */}
+      {/* Game Type Toggle */}
       <div>
         <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
-          Game Mode
+          Game Type
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => handleGameMode('blind-test')}
+            className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              !isTimeline
+                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-[0_0_16px_rgba(168,85,247,0.4)]'
+                : 'bg-white/5 text-white/40 hover:bg-white/10'
+            }`}
+          >
+            Blind Test
+          </button>
+          <button
+            onClick={() => handleGameMode('timeline')}
+            className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              isTimeline
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-[0_0_16px_rgba(245,158,11,0.4)]'
+                : 'bg-white/5 text-white/40 hover:bg-white/10'
+            }`}
+          >
+            Timeline
+          </button>
+        </div>
+      </div>
+
+      {/* Player Mode */}
+      <div>
+        <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+          Player Mode
         </label>
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -239,28 +295,52 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
         </div>
       </div>
 
-      {/* Round Count */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest">
-            Rounds
-          </label>
-          <span className="text-primary font-black text-lg">{settings.totalRounds}</span>
+      {/* Round Count / Cards to Win */}
+      {isTimeline ? (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest">
+              Cards to Win
+            </label>
+            <span className="text-amber-500 font-black text-lg">{settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN}</span>
+          </div>
+          <input
+            type="range"
+            min={3}
+            max={20}
+            value={settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN}
+            onChange={(e) => handleTimelineCards(Number(e.target.value))}
+            className="w-full accent-amber-500 h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(245,158,11,0.5)]"
+            aria-label="Cards to win"
+          />
+          <div className="flex justify-between text-[10px] text-white/20 font-bold mt-1">
+            <span>3</span>
+            <span>20</span>
+          </div>
         </div>
-        <input
-          type="range"
-          min={3}
-          max={30}
-          value={settings.totalRounds}
-          onChange={(e) => handleRounds(Number(e.target.value))}
-          className="w-full accent-primary h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(168,85,247,0.5)]"
-          aria-label="Number of rounds"
-        />
-        <div className="flex justify-between text-[10px] text-white/20 font-bold mt-1">
-          <span>3</span>
-          <span>30</span>
+      ) : (
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest">
+              Rounds
+            </label>
+            <span className="text-primary font-black text-lg">{settings.totalRounds}</span>
+          </div>
+          <input
+            type="range"
+            min={3}
+            max={30}
+            value={settings.totalRounds}
+            onChange={(e) => handleRounds(Number(e.target.value))}
+            className="w-full accent-primary h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(168,85,247,0.5)]"
+            aria-label="Number of rounds"
+          />
+          <div className="flex justify-between text-[10px] text-white/20 font-bold mt-1">
+            <span>3</span>
+            <span>30</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Round Duration */}
       <div>
@@ -286,31 +366,33 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
         </div>
       </div>
 
-      {/* Answer Mode */}
-      <div>
-        <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
-          Answer Mode
-        </label>
-        <div className="grid grid-cols-3 gap-2">
-          {([
-            { mode: 'both' as const, label: 'Both' },
-            { mode: 'artist' as const, label: 'Artist' },
-            { mode: 'title' as const, label: 'Title' },
-          ]).map(({ mode, label }) => (
-            <button
-              key={mode}
-              onClick={() => handleAnswerMode(mode)}
-              className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                answerMode === mode
-                  ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
-                  : 'bg-white/5 text-white/40 hover:bg-white/10'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+      {/* Answer Mode (hidden for Timeline) */}
+      {!isTimeline && (
+        <div>
+          <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+            Answer Mode
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { mode: 'both' as const, label: 'Both' },
+              { mode: 'artist' as const, label: 'Artist' },
+              { mode: 'title' as const, label: 'Title' },
+            ]).map(({ mode, label }) => (
+              <button
+                key={mode}
+                onClick={() => handleAnswerMode(mode)}
+                className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  answerMode === mode
+                    ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                    : 'bg-white/5 text-white/40 hover:bg-white/10'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

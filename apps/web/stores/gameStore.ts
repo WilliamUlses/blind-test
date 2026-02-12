@@ -42,6 +42,10 @@ interface CurrentRound {
   startTimestamp: number;
   endTimestamp: number;
   timeRemaining: number; // Temps restant en ms (mis à jour par le timer)
+  // Timeline mode fields
+  trackTitle?: string;
+  artistName?: string;
+  albumCover?: string;
 }
 
 /**
@@ -168,6 +172,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         startTimestamp,
         endTimestamp,
         timeRemaining: roundDurationMs,
+        trackTitle: roundData.trackTitle,
+        artistName: roundData.artistName,
+        albumCover: roundData.albumCover,
       },
       localPlayer: {
         ...get().localPlayer,
@@ -331,10 +338,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       localPlayer: initialLocalPlayer,
       chatMessages: [],
       emotes: [],
-      isConnecting: false,
-      isConnected: false,
       error: null,
-      serverTimeOffset: 0,
     });
   },
 
@@ -372,5 +376,7 @@ export const useConnectionStatus = () =>
     isConnected: state.isConnected,
     isConnecting: state.isConnecting,
   }));
+export const useGameMode = () =>
+  useGameStore((state) => state.roomState?.settings?.gameMode || 'blind-test');
 export const useChatMessages = () => useGameStore((state) => state.chatMessages);
 export const useGameError = () => useGameStore((state) => state.error);
