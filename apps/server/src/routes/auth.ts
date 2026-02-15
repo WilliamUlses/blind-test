@@ -27,10 +27,13 @@ function generateRefreshToken(): string {
 }
 
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
+  // Cross-domain (Railway backend + Vercel frontend) requires sameSite: 'none' + secure
+  const sameSite = IS_PROD ? 'none' as const : 'lax' as const;
+
   res.cookie('bt_access', accessToken, {
     httpOnly: true,
     secure: IS_PROD,
-    sameSite: 'lax',
+    sameSite,
     maxAge: 15 * 60 * 1000, // 15 min
     path: '/',
   });
@@ -38,15 +41,16 @@ function setAuthCookies(res: Response, accessToken: string, refreshToken: string
   res.cookie('bt_refresh', refreshToken, {
     httpOnly: true,
     secure: IS_PROD,
-    sameSite: 'lax',
+    sameSite,
     maxAge: REFRESH_TOKEN_EXPIRY_MS,
     path: '/',
   });
 }
 
 function clearAuthCookies(res: Response): void {
-  res.clearCookie('bt_access', { path: '/' });
-  res.clearCookie('bt_refresh', { path: '/' });
+  const sameSite = IS_PROD ? 'none' as const : 'lax' as const;
+  res.clearCookie('bt_access', { path: '/', httpOnly: true, secure: IS_PROD, sameSite });
+  res.clearCookie('bt_refresh', { path: '/', httpOnly: true, secure: IS_PROD, sameSite });
 }
 
 /**
