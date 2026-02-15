@@ -39,6 +39,9 @@ interface AuthState {
   clearError: () => void;
 }
 
+// Version counter to prevent stale fetchMe from overwriting login/register state
+let authVersion = 0;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: true,
@@ -46,11 +49,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   fetchMe: async () => {
+    const myVersion = ++authVersion;
     try {
       set({ isLoading: true });
       const res = await fetch(`${API_URL}/api/auth/me`, {
         credentials: 'include',
       });
+
+      // Abort if login/register/logout happened while we were fetching
+      if (myVersion !== authVersion) return;
 
       if (res.ok) {
         const data = await res.json();
@@ -62,11 +69,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           credentials: 'include',
         });
 
+        if (myVersion !== authVersion) return;
+
         if (refreshRes.ok) {
           // Retry /me after refresh
           const retryRes = await fetch(`${API_URL}/api/auth/me`, {
             credentials: 'include',
           });
+          if (myVersion !== authVersion) return;
           if (retryRes.ok) {
             const data = await retryRes.json();
             set({ user: data.user, isAuthenticated: true, isLoading: false, error: null });
@@ -77,11 +87,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user: null, isAuthenticated: false, isLoading: false });
       }
     } catch {
+      if (myVersion !== authVersion) return;
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
 
   login: async (email: string, password: string) => {
+    ++authVersion; // Invalidate any in-flight fetchMe
     try {
       set({ error: null, isLoading: true });
       const res = await fetch(`${API_URL}/api/auth/login`, {
@@ -107,6 +119,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   register: async (email: string, password: string, pseudo: string) => {
+    ++authVersion; // Invalidate any in-flight fetchMe
     try {
       set({ error: null, isLoading: true });
       const res = await fetch(`${API_URL}/api/auth/register`, {
@@ -132,6 +145,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    ++authVersion; // Invalidate any in-flight fetchMe
     try {
       await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
