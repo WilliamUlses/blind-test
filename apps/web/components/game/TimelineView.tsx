@@ -7,7 +7,7 @@ import { GAME_CONSTANTS } from '../../../../packages/shared/types';
 
 export function TimelineView() {
   const roomState = useGameStore((state) => state.roomState);
-  const localPlayerId = useGameStore((state) => state.localPlayer.id);
+  const localPlayerId = useGameStore((state) => state.localPlayer.id) || '';
 
   const cardsToWin = roomState?.settings?.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN;
 

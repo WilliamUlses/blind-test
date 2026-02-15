@@ -21,12 +21,13 @@ export function TimelinePlacement({ onSubmit }: TimelinePlacementProps) {
   const timelineReveal = useGameStore((state) => state.timelineReveal);
   const gamePhase = useGameStore((state) => state.roomState?.status);
 
-  const currentPlayer = roomState?.players.find((p) => p.id === localPlayer.id);
+  const localId = localPlayer.id || '';
+  const currentPlayer = roomState?.players.find((p) => p.id === localId);
 
   // Team mode detection
   const isTeamMode = !!(roomState?.settings?.enableTeams && roomState.teams && roomState.teams.length > 0);
   const myTeam = isTeamMode
-    ? roomState?.teams?.find((t) => t.playerIds.includes(localPlayer.id))
+    ? roomState?.teams?.find((t) => t.playerIds.includes(localId))
     : null;
   const currentTeamTurnId = roomState?.currentTeamTurnId;
   const isMyTeamTurn = !isTeamMode || (myTeam?.id === currentTeamTurnId);
