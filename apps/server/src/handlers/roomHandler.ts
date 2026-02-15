@@ -63,12 +63,14 @@ function generateUniqueRoomCode(): string {
 function createPlayer(
   playerId: string,
   pseudo: string,
-  avatarUrl?: string
+  avatarUrl?: string,
+  userId?: string | null
 ): Player {
   return {
     id: playerId,
     pseudo,
     avatarUrl: avatarUrl || null,
+    userId: userId || null,
     isReady: false,
     isActive: true,
     score: 0,
@@ -79,6 +81,13 @@ function createPlayer(
     cooldownUntil: null,
     hasVotedToPause: false,
     timelineCards: [],
+    hasBuzzed: false,
+    isEliminated: false,
+    lives: 3,
+    isSpectator: false,
+    teamId: null,
+    powerUps: [],
+    activePowerUp: null,
   };
 }
 
@@ -162,7 +171,7 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
 
       // Créer le player (qui sera l'hôte)
       const playerId = socket.id;
-      const host = createPlayer(playerId, pseudo.trim(), sanitizeAvatarUrl(avatarUrl));
+      const host = createPlayer(playerId, pseudo.trim(), sanitizeAvatarUrl(avatarUrl), socket.data.userId || null);
 
       // Configuration par défaut
       const defaultSettings: GameSettings = {
@@ -226,9 +235,10 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
     roomCode: string;
     pseudo: string;
     avatarUrl?: string;
+    spectator?: boolean;
   }) => {
     try {
-      const { roomCode, pseudo, avatarUrl } = data;
+      const { roomCode, pseudo, avatarUrl, spectator } = data;
 
       // Validation du pseudo
       const pseudoValidation = validatePseudo(pseudo);
@@ -250,8 +260,13 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
       const state = manager.getState();
 
       // --- LOGIQUE DE RECONNEXION ---
-      // Chercher un joueur inactif avec le même pseudo
-      const existingPlayer = state.players.find(
+      // Try to reconnect by userId first (if authenticated), then by pseudo
+      const authUserId = socket.data.userId as string | undefined;
+      const existingPlayer = (
+        authUserId
+          ? state.players.find((p) => p.userId === authUserId)
+          : null
+      ) || state.players.find(
         (p) => p.pseudo.toLowerCase() === pseudo.trim().toLowerCase()
       );
 
@@ -304,19 +319,23 @@ export function setupRoomHandlers(socket: Socket, io: Server): void {
 
       // --- LOGIQUE STANDARD JOUEUR ---
 
-      // Vérifier que la partie n'a pas déjà commencé
-      if (state.status !== 'WAITING') {
+      // Spectators can join mid-game
+      if (state.status !== 'WAITING' && !spectator) {
         return sendError(socket, 'GAME_ALREADY_STARTED');
       }
 
-      // Vérifier que la room n'est pas pleine
-      if (state.players.length >= state.settings.maxPlayers) {
+      // Vérifier que la room n'est pas pleine (spectators don't count)
+      const activePlayers = state.players.filter(p => !p.isSpectator);
+      if (!spectator && activePlayers.length >= state.settings.maxPlayers) {
         return sendError(socket, 'ROOM_FULL');
       }
 
       // Créer le player
       const playerId = socket.id;
-      const player = createPlayer(playerId, pseudo.trim(), sanitizeAvatarUrl(avatarUrl));
+      const player = createPlayer(playerId, pseudo.trim(), sanitizeAvatarUrl(avatarUrl), socket.data.userId || null);
+      if (spectator) {
+        player.isSpectator = true;
+      }
 
       // Ajouter le joueur
       manager.addPlayer(player);

@@ -77,11 +77,24 @@ export function useSocketListeners() {
             setCurrentRound(roundData);
             clearPlayerCooldown();
             useGameStore.getState().clearEmotes();
+            useGameStore.getState().setBuzzerLock(null);
+            useGameStore.getState().setCurrentIntroTier(0);
+            useGameStore.getState().setActiveHint(null);
+            useGameStore.getState().setTimelineReveal(null);
+            useGameStore.getState().setLyricsData(null);
         };
 
-        const onAnswerResult = ({ correct, cooldownUntil, foundPart }: any) => {
+        const onAnswerResult = ({ correct, cooldownUntil, foundPart, timelineReveal }: any) => {
             // Mark the last attempt with the server result
             useGameStore.getState().markLastAttemptResult(correct, foundPart);
+
+            // Store timeline reveal data if present
+            if (timelineReveal) {
+                useGameStore.getState().setTimelineReveal({
+                    ...timelineReveal,
+                    correct,
+                });
+            }
 
             if (correct) {
                 clearPlayerCooldown();
@@ -95,6 +108,21 @@ export function useSocketListeners() {
 
         const onRoundEnd = (result: RoundResult) => {
             setLastRoundResult(result);
+
+            // Track missed tracks for post-game playlist
+            const localId = useGameStore.getState().localPlayer.id;
+            const myResult = result.playerResults.find(r => r.playerId === localId);
+            if (myResult && !myResult.wasCorrect) {
+                const store = useGameStore.getState();
+                const currentMissed = store.missedTracks;
+                useGameStore.setState({
+                    missedTracks: [...currentMissed, {
+                        trackTitle: result.trackTitle,
+                        artistName: result.artistName,
+                        albumCover: result.albumCover,
+                    }],
+                });
+            }
         };
 
         const onTimeSync = ({ serverTime }: any) => {
@@ -123,6 +151,54 @@ export function useSocketListeners() {
             // game_over + room_updated handle the transition
         };
 
+        // Buzzer mode
+        const onBuzzerLocked = ({ playerId, pseudo, buzzerTimeMs }: any) => {
+            useGameStore.getState().setBuzzerLock({ playerId, pseudo, buzzerTimeMs: buzzerTimeMs || 10000 });
+        };
+
+        const onBuzzerReleased = () => {
+            useGameStore.getState().setBuzzerLock(null);
+        };
+
+        const onBuzzerTimeout = () => {
+            useGameStore.getState().setBuzzerLock(null);
+        };
+
+        // Elimination mode
+        const onPlayerEliminated = () => {
+            // room_updated handles the player state change
+        };
+
+        // Intro mode
+        const onIntroTierUnlock = ({ tier, phase, durationMs }: any) => {
+            useGameStore.getState().setCurrentIntroTier(tier);
+            useGameStore.getState().setIntroPhase(phase, durationMs);
+        };
+
+        // Lyrics mode
+        const onLyricsData = (data: any) => {
+            useGameStore.getState().setLyricsData(data);
+        };
+
+        const onLyricsResult = (data: any) => {
+            // lyrics_result is handled directly by the LyricsInput component
+            // via its own socket listener. This is a no-op placeholder.
+        };
+
+        // Power-ups
+        const onPowerupActivated = () => {
+            // room_updated handles the player state change
+        };
+
+        const onHintReceived = ({ hint, hintType }: any) => {
+            useGameStore.getState().setActiveHint({ hint, hintType });
+        };
+
+        // Contextual reactions
+        const onContextualReaction = () => {
+            // Handled by EmoteOverlay if needed
+        };
+
         const onError = ({ code, message }: any) => {
             setError({ code, message });
         };
@@ -144,6 +220,16 @@ export function useSocketListeners() {
         socket.on('emote_received', onEmoteReceived);
         socket.on('timeline_card_added', onTimelineCardAdded);
         socket.on('timeline_winner', onTimelineWinner);
+        socket.on('buzzer_locked', onBuzzerLocked);
+        socket.on('buzzer_released', onBuzzerReleased);
+        socket.on('buzzer_timeout', onBuzzerTimeout);
+        socket.on('player_eliminated', onPlayerEliminated);
+        socket.on('intro_tier_unlock', onIntroTierUnlock);
+        socket.on('lyrics_data', onLyricsData);
+        socket.on('lyrics_result', onLyricsResult);
+        socket.on('powerup_activated', onPowerupActivated);
+        socket.on('hint_received', onHintReceived);
+        socket.on('contextual_reaction', onContextualReaction);
         socket.on('error', onError);
 
         // Cleanup
@@ -164,6 +250,16 @@ export function useSocketListeners() {
             socket.off('emote_received', onEmoteReceived);
             socket.off('timeline_card_added', onTimelineCardAdded);
             socket.off('timeline_winner', onTimelineWinner);
+            socket.off('buzzer_locked', onBuzzerLocked);
+            socket.off('buzzer_released', onBuzzerReleased);
+            socket.off('buzzer_timeout', onBuzzerTimeout);
+            socket.off('player_eliminated', onPlayerEliminated);
+            socket.off('intro_tier_unlock', onIntroTierUnlock);
+            socket.off('lyrics_data', onLyricsData);
+            socket.off('lyrics_result', onLyricsResult);
+            socket.off('powerup_activated', onPowerupActivated);
+            socket.off('hint_received', onHintReceived);
+            socket.off('contextual_reaction', onContextualReaction);
             socket.off('error', onError);
         };
     }, []); // Dépendances vides pour n'exécuter qu'au montage

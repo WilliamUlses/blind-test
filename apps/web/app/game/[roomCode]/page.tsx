@@ -21,6 +21,10 @@ import { EmoteBar } from '../../../components/game/EmoteBar';
 import { EmoteOverlay } from '../../../components/game/EmoteOverlay';
 import { TimelinePlacement } from '../../../components/game/TimelinePlacement';
 import { TimelineView } from '../../../components/game/TimelineView';
+import { BuzzerInput } from '../../../components/game/BuzzerInput';
+import { PowerUpBar } from '../../../components/game/PowerUpBar';
+import { IntroTierIndicator } from '../../../components/game/IntroTierIndicator';
+import { LyricsInput } from '../../../components/game/LyricsInput';
 import { GAME_CONSTANTS } from '../../../../../packages/shared/types';
 
 // Helper component for Rejoin
@@ -50,11 +54,25 @@ export default function GamePage() {
   const gamePhase = useGamePhase();
   const currentRound = useCurrentRound();
   const roomState = useRoomState();
-  const audioPlayer = useSyncedAudioPlayer();
+  const gameMode = useGameMode();
+  // Never apply progressive audio filter in buzzer mode (causes distortion)
+  const shouldUseProgressiveAudio = gameMode !== 'buzzer' &&
+    ((roomState?.settings?.progressiveAudio ?? false) || roomState?.settings?.difficulty === 'hard');
+  const audioPlayer = useSyncedAudioPlayer({
+    progressiveAudio: shouldUseProgressiveAudio,
+    roundDurationMs: roomState?.settings?.roundDurationMs ?? 30000,
+  });
   const serverTimeOffset = useGameStore((state) => state.serverTimeOffset);
   const { isConnected, isConnecting } = useConnectionStatus();
-  const gameMode = useGameMode();
   const isTimeline = gameMode === 'timeline';
+  const isBuzzer = gameMode === 'buzzer';
+  const isElimination = gameMode === 'elimination';
+  const isIntro = gameMode === 'intro';
+  const isLyrics = gameMode === 'lyrics';
+  const buzzerLock = useGameStore(s => s.buzzerLock);
+  const currentIntroTier = useGameStore(s => s.currentIntroTier);
+  const activeHint = useGameStore(s => s.activeHint);
+  const introPhase = useGameStore(s => s.introPhase);
   const [showVolume, setShowVolume] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [prevVolume, setPrevVolume] = useState(0.8);
@@ -77,7 +95,20 @@ export default function GamePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRound?.previewUrl, currentRound?.startTimestamp, gamePhase]);
 
-  const { togglePause, sendEmote, leaveRoom } = useGameActions();
+  // Intro mode: pause/resume audio based on phase
+  useEffect(() => {
+    if (!isIntro || gamePhase !== 'PLAYING') return;
+    if (introPhase === 'guessing') {
+      audioPlayer.pause();
+    } else if (introPhase === 'listening') {
+      // Replay from the beginning for cumulative listening
+      audioPlayer.seek(0);
+      audioPlayer.play();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [introPhase, isIntro, gamePhase]);
+
+  const { togglePause, sendEmote, leaveRoom, buzzerPress, submitAnswer, submitTimelineAnswer, submitLyrics } = useGameActions();
   const emotes = useGameStore((state) => state.emotes);
 
   // Rediriger si la partie est terminée
@@ -178,8 +209,8 @@ export default function GamePage() {
             <span className="text-white font-black text-sm md:text-lg tracking-wider">{roomCode}</span>
           </div>
 
-          {/* Timer Centered */}
-          {gamePhase === 'PLAYING' && (
+          {/* Timer Centered — hidden for buzzer (has its own timer) and intro (no global timer) */}
+          {gamePhase === 'PLAYING' && !isBuzzer && !isIntro && (
             <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2">
               <Timer />
             </div>
@@ -191,11 +222,10 @@ export default function GamePage() {
             <div
               role="status"
               aria-label={isConnected ? 'Connected' : isConnecting ? 'Reconnecting' : 'Disconnected'}
-              className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                isConnected ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]'
+              className={`w-2.5 h-2.5 rounded-full transition-colors ${isConnected ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.5)]'
                 : isConnecting ? 'bg-yellow-500 animate-pulse shadow-[0_0_6px_rgba(234,179,8,0.5)]'
-                : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
-              }`}
+                  : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+                }`}
               title={isConnected ? 'Connected' : isConnecting ? 'Reconnecting...' : 'Disconnected'}
             />
 
@@ -206,7 +236,13 @@ export default function GamePage() {
                 <div className="flex items-baseline gap-1">
                   <span className="text-amber-500 font-black text-sm md:text-xl">
                     {(() => {
-                      const me = roomState.players.find(p => p.id === useGameStore.getState().localPlayer?.id);
+                      const localId = useGameStore.getState().localPlayer?.id || '';
+                      const isTeamMode = roomState.settings?.enableTeams && roomState.teams && roomState.teams.length > 0;
+                      if (isTeamMode) {
+                        const myTeam = roomState.teams?.find(t => t.playerIds.includes(localId));
+                        return myTeam?.timelineCards?.length || 0;
+                      }
+                      const me = roomState.players.find(p => p.id === localId);
                       return me?.timelineCards?.length || 0;
                     })()}
                   </span>
@@ -229,11 +265,10 @@ export default function GamePage() {
                 onClick={toggleMute}
                 onContextMenu={(e) => { e.preventDefault(); setShowVolume(!showVolume); }}
                 onMouseEnter={() => setShowVolume(true)}
-                className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all ${
-                  audioPlayer.volume === 0
-                    ? 'bg-white/5 text-white/40'
-                    : 'bg-white/10 text-white hover:bg-white/20'
-                }`}
+                className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all ${audioPlayer.volume === 0
+                  ? 'bg-white/5 text-white/40'
+                  : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
                 aria-label={audioPlayer.volume === 0 ? 'Unmute audio' : 'Mute audio'}
                 title={audioPlayer.volume === 0 ? 'Unmute' : 'Mute'}
               >
@@ -282,8 +317,8 @@ export default function GamePage() {
               <button
                 onClick={() => togglePause()}
                 className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center transition-all text-xs md:text-base ${roomState.players.find(p => p.id === useGameStore.getState().localPlayer?.id)?.hasVotedToPause
-                    ? 'bg-yellow-500 text-black hover:bg-yellow-400'
-                    : 'bg-white/10 text-white hover:bg-white/20'
+                  ? 'bg-yellow-500 text-black hover:bg-yellow-400'
+                  : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                 aria-label={roomState.isPaused ? 'Resume game' : 'Pause game'}
                 title={roomState.isPaused ? 'Resume' : 'Pause'}
@@ -324,18 +359,79 @@ export default function GamePage() {
 
             {/* Answer Input Area */}
             <div className="w-full max-w-2xl relative z-20">
-              {gamePhase === 'PLAYING' ? (
-                isTimeline ? (
-                  <>
-                    <TimelinePlacement />
-                    <EmoteBar onEmote={sendEmote} />
-                  </>
-                ) : (
-                  <>
-                    <AnswerInput placeholder="Type Artist + Title..." />
-                    <EmoteBar onEmote={sendEmote} />
-                  </>
-                )
+              {/* Intro tier indicator */}
+              {isIntro && gamePhase === 'PLAYING' && (
+                <IntroTierIndicator />
+              )}
+
+              {/* Hint display */}
+              {activeHint && gamePhase === 'PLAYING' && (
+                <div className="mb-3 text-center">
+                  <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-bold">
+                    <span>💡</span>
+                    {activeHint.hintType === 'artist' ? 'Artiste' : 'Titre'} commence par : <span className="text-white font-black text-lg">{activeHint.hint}</span>
+                  </span>
+                </div>
+              )}
+
+              {/* Power-up bar */}
+              {roomState.settings.enablePowerUps && gamePhase === 'PLAYING' && (
+                <PowerUpBar />
+              )}
+
+              {/* Timeline: single render across PLAYING + REVEAL to preserve flip animation state */}
+              {isTimeline && (gamePhase === 'PLAYING' || gamePhase === 'REVEAL') ? (
+                <>
+                  <TimelinePlacement onSubmit={submitTimelineAnswer} />
+                  {gamePhase === 'PLAYING' && <EmoteBar onEmote={sendEmote} />}
+                </>
+              ) : gamePhase === 'PLAYING' ? (
+                (() => {
+                  // Check if eliminated (spectator overlay)
+                  const meInRoom = roomState.players.find(p => p.id === useGameStore.getState().localPlayer?.id);
+                  if (meInRoom?.isEliminated) {
+                    return (
+                      <div className="text-center py-8">
+                        <div className="text-5xl mb-4">💀</div>
+                        <p className="text-white/60 font-bold uppercase tracking-wider text-sm">Éliminé</p>
+                        <p className="text-white/30 text-xs mt-2">Tu regardes en spectateur</p>
+                      </div>
+                    );
+                  }
+
+                  if (isBuzzer) {
+                    return (
+                      <>
+                        <BuzzerInput
+                          onBuzz={buzzerPress}
+                          onSubmitAnswer={submitAnswer}
+                          onPauseAudio={() => audioPlayer.pause()}
+                          onResumeAudio={() => audioPlayer.play()}
+                        />
+                        <EmoteBar onEmote={sendEmote} />
+                      </>
+                    );
+                  }
+                  if (isLyrics) {
+                    return (
+                      <>
+                        <AnswerInput placeholder="Artiste + Titre..." />
+                        <LyricsInput
+                          onSubmitLyrics={(answers) => {
+                            submitLyrics(answers);
+                          }}
+                        />
+                        <EmoteBar onEmote={sendEmote} />
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <AnswerInput placeholder="Type Artist + Title..." />
+                      <EmoteBar onEmote={sendEmote} />
+                    </>
+                  );
+                })()
               ) : gamePhase === 'REVEAL' ? (
                 <RevealView />
               ) : (

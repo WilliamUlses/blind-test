@@ -7,6 +7,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import jwt from 'jsonwebtoken';
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -14,6 +16,10 @@ import {
 } from '../../../packages/shared/types';
 import { setupRoomHandlers } from './handlers/roomHandler';
 import { setupGameHandlers } from './handlers/gameHandler';
+import { authMiddleware } from './middlewares/auth';
+import authRoutes from './routes/auth';
+import profileRoutes from './routes/profile';
+import dailyRoutes from './routes/daily';
 
 /**
  * Configuration du serveur
@@ -32,8 +38,10 @@ app.use(cors({
   credentials: true,
 }));
 
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(authMiddleware);
 
 // Health check
 app.get('/', (req, res) => {
@@ -44,9 +52,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes API (pour les requêtes HTTP classiques si nécessaire)
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/daily', dailyRoutes);
+
 app.get('/api/rooms', (req, res) => {
-  // TODO: Implémenter la liste des rooms publiques si nécessaire
   res.json({ rooms: [] });
 });
 
@@ -70,12 +81,36 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   transports: ['websocket', 'polling'],
 });
 
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
+
 /**
- * Middleware Socket.io pour logger les connexions
+ * Parse cookies from a raw cookie header string
+ */
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) return cookies;
+  cookieHeader.split(';').forEach((c) => {
+    const [name, ...rest] = c.trim().split('=');
+    if (name) cookies[name] = decodeURIComponent(rest.join('='));
+  });
+  return cookies;
+}
+
+/**
+ * Socket.io middleware: attach userId from JWT cookie (guests are allowed)
  */
 io.use((socket, next) => {
-  const userAgent = socket.handshake.headers['user-agent'];
-  console.log(`New connection attempt: ${socket.id} from ${userAgent}`);
+  const cookies = parseCookies(socket.handshake.headers.cookie);
+  const token = cookies['bt_access'];
+  if (token) {
+    try {
+      const payload = jwt.verify(token, JWT_SECRET) as { userId: string; pseudo: string };
+      socket.data.userId = payload.userId;
+      socket.data.authPseudo = payload.pseudo;
+    } catch {
+      // Guest - no auth
+    }
+  }
   next();
 });
 

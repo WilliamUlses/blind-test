@@ -81,6 +81,26 @@ interface GameStore {
   // Emotes
   emotes: EmoteEntry[];
 
+  // Buzzer mode
+  buzzerLock: { playerId: string; pseudo: string; buzzerTimeMs: number } | null;
+
+  // Intro mode
+  currentIntroTier: number;
+  introPhase: 'listening' | 'guessing' | null;
+  introDurationMs: number;
+
+  // Hint (from power-up)
+  activeHint: { hint: string; hintType: 'artist' | 'title' } | null;
+
+  // Timeline reveal (after placement)
+  timelineReveal: { trackTitle: string; artistName: string; albumCover: string; releaseYear: number; correct: boolean } | null;
+
+  // Lyrics mode
+  lyricsData: { lyricsText: string; blanks: { position: number; answer: string }[] } | null;
+
+  // Missed tracks for post-game playlist
+  missedTracks: { trackTitle: string; artistName: string; albumCover: string }[];
+
   // Loading & errors
   isConnecting: boolean;
   isConnected: boolean;
@@ -107,6 +127,12 @@ interface GameStore {
   setConnectionStatus: (isConnected: boolean, isConnecting?: boolean) => void;
   setError: (error: { code: string; message: string } | null) => void;
   updateServerTimeOffset: (serverTime: number) => void;
+  setBuzzerLock: (lock: { playerId: string; pseudo: string; buzzerTimeMs: number } | null) => void;
+  setCurrentIntroTier: (tier: number) => void;
+  setIntroPhase: (phase: 'listening' | 'guessing' | null, durationMs?: number) => void;
+  setActiveHint: (hint: { hint: string; hintType: 'artist' | 'title' } | null) => void;
+  setTimelineReveal: (reveal: { trackTitle: string; artistName: string; albumCover: string; releaseYear: number; correct: boolean } | null) => void;
+  setLyricsData: (data: { lyricsText: string; blanks: { position: number; answer: string }[] } | null) => void;
   reset: () => void;
 
   // Computed helpers
@@ -140,6 +166,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   localPlayer: initialLocalPlayer,
   chatMessages: [],
   emotes: [],
+  buzzerLock: null,
+  currentIntroTier: 0,
+  introPhase: null,
+  introDurationMs: 0,
+  activeHint: null,
+  timelineReveal: null,
+  lyricsData: null,
+  missedTracks: [],
   isConnecting: false,
   isConnected: false,
   error: null,
@@ -330,6 +364,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ serverTimeOffset: offset });
   },
 
+  setBuzzerLock: (lock) => {
+    set({ buzzerLock: lock });
+  },
+
+  setCurrentIntroTier: (tier) => {
+    set({ currentIntroTier: tier });
+  },
+
+  setIntroPhase: (phase: 'listening' | 'guessing' | null, durationMs?: number) => {
+    set({ introPhase: phase, ...(durationMs !== undefined ? { introDurationMs: durationMs } : {}) });
+  },
+
+  setActiveHint: (hint) => {
+    set({ activeHint: hint });
+  },
+
+  setTimelineReveal: (reveal) => {
+    set({ timelineReveal: reveal });
+  },
+
+  setLyricsData: (data) => {
+    set({ lyricsData: data });
+  },
+
   reset: () => {
     set({
       roomState: null,
@@ -338,6 +396,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       localPlayer: initialLocalPlayer,
       chatMessages: [],
       emotes: [],
+      buzzerLock: null,
+      currentIntroTier: 0,
+      introPhase: null,
+      introDurationMs: 0,
+      activeHint: null,
+      timelineReveal: null,
+      lyricsData: null,
+      missedTracks: [],
       error: null,
     });
   },

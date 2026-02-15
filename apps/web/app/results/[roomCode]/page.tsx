@@ -10,7 +10,10 @@ import { motion } from 'framer-motion';
 import { useRoomState, useIsHost, useGamePhase, useGameMode } from '../../../stores/gameStore';
 import { useGameActions } from '../../../hooks/useGameActions';
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { Share2, Copy, Check, RotateCcw, Home } from 'lucide-react';
+import { Share2, Copy, Check, RotateCcw, Home, Music } from 'lucide-react';
+import { useGameStore } from '../../../stores/gameStore';
+import { usePlayerProfile } from '../../../hooks/usePlayerProfile';
+import { useAuthStore } from '../../../hooks/useAuth';
 
 const MEDAL_COLORS = [
   'from-yellow-400/20 to-yellow-600/10 border-yellow-500/40',
@@ -31,6 +34,11 @@ export default function ResultsPage() {
   const gameMode = useGameMode();
   const isTimeline = gameMode === 'timeline';
   const [copied, setCopied] = useState(false);
+  const missedTracks = useGameStore(s => s.missedTracks);
+  const [showDiscoveries, setShowDiscoveries] = useState(false);
+  const { recordGame } = usePlayerProfile();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const [statsRecorded, setStatsRecorded] = useState(false);
 
   // When the room resets to WAITING (host clicked replay), redirect everyone to lobby
   useEffect(() => {
@@ -47,6 +55,25 @@ export default function ResultsPage() {
         : b.score - a.score
     );
   }, [roomState, isTimeline]);
+
+  // Record game stats (once) — skip for authenticated users (server already persists via endGame)
+  useEffect(() => {
+    if (!roomState || statsRecorded || sortedPlayers.length === 0 || isAuthenticated) return;
+    const localId = useGameStore.getState().localPlayer.id;
+    const myIndex = sortedPlayers.findIndex(p => p.id === localId);
+    if (myIndex === -1) return;
+    const me = sortedPlayers[myIndex];
+    recordGame({
+      date: new Date().toISOString(),
+      mode: gameMode || 'classic',
+      score: isTimeline ? me.timelineCards.length : me.score,
+      rank: myIndex + 1,
+      totalPlayers: sortedPlayers.length,
+      won: myIndex === 0,
+      genre: roomState.settings.genre || null,
+    });
+    setStatsRecorded(true);
+  }, [roomState, sortedPlayers, statsRecorded, recordGame, gameMode, isTimeline, isAuthenticated]);
 
   const top3 = sortedPlayers.slice(0, 3);
   const others = sortedPlayers.slice(3);
@@ -102,9 +129,8 @@ export default function ResultsPage() {
           className="mb-12 text-center"
         >
           <h1 className="font-display text-4xl md:text-6xl font-black mb-3 tracking-tighter">
-            <span className={`text-transparent bg-clip-text bg-gradient-to-r ${
-              isTimeline ? 'from-amber-400 to-orange-400' : 'from-primary to-secondary'
-            }`}>
+            <span className={`text-transparent bg-clip-text bg-gradient-to-r ${isTimeline ? 'from-amber-400 to-orange-400' : 'from-primary to-secondary'
+              }`}>
               Résultats
             </span>
           </h1>
@@ -139,9 +165,8 @@ export default function ResultsPage() {
                 </div>
 
                 <div className="text-right">
-                  <p className={`font-display text-2xl md:text-3xl font-black ${
-                    index === 0 ? 'text-yellow-400' : index === 1 ? 'text-gray-300' : 'text-amber-600'
-                  }`}>
+                  <p className={`font-display text-2xl md:text-3xl font-black ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-gray-300' : 'text-amber-600'
+                    }`}>
                     {isTimeline ? player.timelineCards.length : player.score.toLocaleString()}
                   </p>
                   <p className="text-white/40 text-xs font-bold uppercase tracking-wider">
@@ -190,6 +215,48 @@ export default function ResultsPage() {
                 </motion.div>
               ))}
             </div>
+          </motion.div>
+        )}
+
+        {/* Missed tracks / Discoveries */}
+        {missedTracks.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+            className="mb-6"
+          >
+            <button
+              onClick={() => setShowDiscoveries(!showDiscoveries)}
+              className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl text-white font-bold hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2"
+            >
+              <Music className="w-4 h-4 text-primary" />
+              Mes découvertes ({missedTracks.length})
+              <span className="text-white/30 text-xs">{showDiscoveries ? '▲' : '▼'}</span>
+            </button>
+
+            {showDiscoveries && (
+              <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                {missedTracks.map((track, i) => (
+                  <a
+                    key={i}
+                    href={`https://www.google.com/search?q=${encodeURIComponent(`${track.artistName} ${track.trackTitle} spotify`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all group"
+                  >
+                    {track.albumCover && (
+                      <img src={track.albumCover} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-bold truncate">{track.trackTitle}</p>
+                      <p className="text-white/40 text-xs truncate">{track.artistName}</p>
+                    </div>
+                    <span className="text-white/20 group-hover:text-primary text-xs">🔗</span>
+                  </a>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
 

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Outfit } from 'next/font/google';
 import { SocketProvider } from '../components/providers/SocketProvider';
+import { AuthProvider } from '../components/providers/AuthProvider';
 import '../styles/globals.css';
 
 const outfit = Outfit({
@@ -141,9 +142,11 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans min-h-screen bg-background text-white selection:bg-primary/30">
-        <SocketProvider>
-          {children}
-        </SocketProvider>
+        <AuthProvider>
+          <SocketProvider>
+            {children}
+          </SocketProvider>
+        </AuthProvider>
       </body>
     </html>
   );

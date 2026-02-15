@@ -121,14 +121,20 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
       const state = manager.getState();
       let result;
 
-      if (state.settings.gameMode === 'timeline') {
+      const gameMode = state.settings.gameMode;
+
+      if (gameMode === 'timeline') {
         // En mode Timeline, answer = index de placement (parsé en int)
         const insertIndex = parseInt(answer, 10);
         if (isNaN(insertIndex)) {
           return sendError(socket, 'RATE_LIMITED', 'Position invalide');
         }
         result = manager.submitTimelineAnswer(playerId, insertIndex, timestamp);
+      } else if (gameMode === 'buzzer') {
+        // En mode Buzzer, on utilise submitBuzzerAnswer si le joueur a le lock
+        result = await manager.submitBuzzerAnswer(playerId, answer, timestamp);
       } else {
+        // blind-test, elimination, intro, lyrics — tous utilisent submitAnswer
         result = await manager.submitAnswer(playerId, answer, timestamp);
       }
 
@@ -204,6 +210,74 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
   });
 
   /**
+   * Buzzer press (mode buzzer)
+   */
+  socket.on('buzzer_press', () => {
+    try {
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) return;
+
+      const manager = gameManagers.get(roomCode);
+      if (!manager) return;
+
+      const playerId = socket.data.playerId;
+      if (!playerId) return;
+
+      manager.handleBuzzerPress(playerId);
+    } catch (error) {
+      console.error('Error in buzzer_press:', error);
+    }
+  });
+
+  /**
+   * Activate power-up
+   */
+  socket.on('activate_powerup', (data: { powerUp: string }) => {
+    try {
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) return;
+
+      const manager = gameManagers.get(roomCode);
+      if (!manager) return;
+
+      const playerId = socket.data.playerId;
+      if (!playerId) return;
+
+      manager.activatePowerUp(playerId, data.powerUp as any);
+    } catch (error) {
+      console.error('Error in activate_powerup:', error);
+    }
+  });
+
+  /**
+   * Join a team
+   */
+  socket.on('join_team', (data: { teamId: string }) => {
+    try {
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) return;
+
+      const manager = gameManagers.get(roomCode);
+      if (!manager) return;
+
+      const playerId = socket.data.playerId;
+      if (!playerId) return;
+
+      const state = manager.getState();
+      const player = state.players.find(p => p.id === playerId);
+      if (!player) return;
+
+      player.teamId = data.teamId || null;
+      manager.updateState(state);
+
+      // Broadcast update
+      io.to(roomCode).emit('room_updated', { roomState: manager.getState() });
+    } catch (error) {
+      console.error('Error in join_team:', error);
+    }
+  });
+
+  /**
    * Envoyer un emote (réaction emoji)
    */
   socket.on('send_emote', (data: { emote: string }) => {
@@ -235,6 +309,26 @@ export function setupGameHandlers(socket: Socket, io: Server): void {
       });
     } catch (error) {
       console.error('Error in send_emote:', error);
+    }
+  });
+
+  /**
+   * Submit lyrics answers (mode lyrics)
+   */
+  socket.on('submit_lyrics', (data: { answers: string[]; timestamp: number }) => {
+    try {
+      const roomCode = getRoomCodeFromSocket(socket);
+      if (!roomCode) return;
+
+      const manager = gameManagers.get(roomCode);
+      if (!manager) return;
+
+      const playerId = socket.data.playerId;
+      if (!playerId) return;
+
+      manager.submitLyricsAnswer(playerId, data.answers, data.timestamp);
+    } catch (error) {
+      console.error('Error in submit_lyrics:', error);
     }
   });
 

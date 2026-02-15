@@ -14,6 +14,7 @@ import { useGameStore } from '../../../stores/gameStore';
 import { LobbySettings } from '../../../components/game/LobbySettings';
 import { SharePanel } from '../../../components/game/SharePanel';
 import { LobbyChat } from '../../../components/game/LobbyChat';
+import { TeamSelector } from '../../../components/game/TeamSelector';
 import { X } from 'lucide-react';
 
 export default function LobbyPage() {
@@ -244,6 +245,20 @@ export default function LobbyPage() {
                 isHost={isHost}
                 onUpdateSettings={updateSettings}
               />
+
+              {/* Team Selector (when teams enabled) */}
+              {roomState.settings.enableTeams && (
+                <div className="mt-6">
+                  <TeamSelector onJoinTeam={(teamId) => {
+                    const socket = (window as any).__socket;
+                    if (!socket) {
+                      import('../../../lib/socket').then(mod => {
+                        mod.getSocket().emit('join_team', { teamId });
+                      });
+                    }
+                  }} />
+                </div>
+              )}
 
               {/* Game Loop Controls */}
               <div className="mt-8 space-y-3">

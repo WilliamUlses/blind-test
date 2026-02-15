@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { GameSettings, GameMode } from '../../../../packages/shared/types';
-import { GAME_CONSTANTS } from '../../../../packages/shared/types';
+import { GAME_CONSTANTS, GAME_MODES_INFO } from '../../../../packages/shared/types';
 
 interface LobbySettingsProps {
   settings: GameSettings;
@@ -105,62 +105,104 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
     onUpdateSettings({ isSoloMode: solo });
   };
 
-  const handleGameMode = (mode: GameMode) => {
-    if (!isHost) return;
-    onUpdateSettings({ gameMode: mode });
-  };
-
   const handleTimelineCards = (value: number) => {
     if (!isHost) return;
     onUpdateSettings({ timelineCardsToWin: value });
   };
 
+  const handleEliminationLives = (value: number) => {
+    if (!isHost) return;
+    onUpdateSettings({ eliminationLives: value });
+  };
+
   const gameMode = settings.gameMode || 'blind-test';
   const isTimeline = gameMode === 'timeline';
+  const isElimination = gameMode === 'elimination';
 
   // Read-only display for non-host
   if (!isHost) {
     return (
       <div className="space-y-4">
+        {/* Game Mode Badge */}
+        {(() => {
+          const modeInfo = GAME_MODES_INFO.find(m => m.id === gameMode);
+          return modeInfo ? (
+            <div className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r ${modeInfo.gradient} text-white shadow-lg`}>
+              <span>{modeInfo.icon}</span>
+              <span>{modeInfo.title}</span>
+            </div>
+          ) : null;
+        })()}
+
+        {/* Core Settings */}
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
-          <span className="text-white/60 text-sm">Game</span>
-          <span className="text-primary font-bold">{isTimeline ? 'Timeline' : 'Blind Test'}</span>
-        </div>
-        <div className="flex justify-between items-center pb-3 border-b border-white/5">
-          <span className="text-white/60 text-sm">Mode</span>
+          <span className="text-white/60 text-sm">🎮 Mode</span>
           <span className="text-primary font-bold">{settings.isSoloMode ? 'Solo' : 'Multiplayer'}</span>
         </div>
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
-          <span className="text-white/60 text-sm">Difficulty</span>
-          <span className="text-primary font-bold capitalize">{difficulty}</span>
+          <span className="text-white/60 text-sm">📊 Difficulté</span>
+          <span className={`font-bold capitalize ${difficulty === 'easy' ? 'text-green-400' : difficulty === 'hard' ? 'text-red-400' : 'text-yellow-400'
+            }`}>{difficulty}</span>
         </div>
+        {gameMode === 'elimination' && (
+          <div className="flex justify-between items-center pb-3 border-b border-white/5">
+            <span className="text-white/60 text-sm">💀 Vies</span>
+            <span className="text-red-400 font-bold">
+              {(settings.eliminationLives ?? 3) === 1 ? 'Mort subite' : `${settings.eliminationLives ?? 3} vies`}
+            </span>
+          </div>
+        )}
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
-          <span className="text-white/60 text-sm">Genre</span>
+          <span className="text-white/60 text-sm">🎵 Genre</span>
           <span className="text-primary font-bold">{settings.genre ? (ALL_GENRE_LABELS[settings.genre] || settings.genre) : 'Random'}</span>
         </div>
         {isTimeline ? (
           <div className="flex justify-between items-center pb-3 border-b border-white/5">
-            <span className="text-white/60 text-sm">Cards to Win</span>
-            <span className="text-primary font-bold text-xl">{settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN}</span>
+            <span className="text-white/60 text-sm">🃏 Cartes à gagner</span>
+            <span className="text-amber-500 font-black text-lg">{settings.timelineCardsToWin || GAME_CONSTANTS.TIMELINE_CARDS_TO_WIN}</span>
           </div>
         ) : (
           <div className="flex justify-between items-center pb-3 border-b border-white/5">
-            <span className="text-white/60 text-sm">Rounds</span>
-            <span className="text-primary font-bold text-xl">{settings.totalRounds}</span>
+            <span className="text-white/60 text-sm">🔄 Rounds</span>
+            <span className="text-primary font-black text-lg">{settings.totalRounds}</span>
           </div>
         )}
         <div className="flex justify-between items-center pb-3 border-b border-white/5">
-          <span className="text-white/60 text-sm">Duration</span>
-          <span className="text-primary font-bold text-xl">{settings.roundDurationMs / 1000}s</span>
+          <span className="text-white/60 text-sm">⏱️ Durée</span>
+          <span className="text-primary font-black text-lg">{settings.roundDurationMs / 1000}s</span>
         </div>
         {!isTimeline && (
-          <div className="flex justify-between items-center">
-            <span className="text-white/60 text-sm">Answer Mode</span>
-            <span className="text-primary font-bold capitalize">
-              {answerMode === 'both' ? 'Artist + Title' : answerMode === 'artist' ? 'Artist Only' : 'Title Only'}
+          <div className="flex justify-between items-center pb-3 border-b border-white/5">
+            <span className="text-white/60 text-sm">✍️ Réponses</span>
+            <span className="text-primary font-bold">
+              {answerMode === 'both' ? 'Artiste + Titre' : answerMode === 'artist' ? 'Artiste seul' : 'Titre seul'}
             </span>
           </div>
         )}
+
+        {/* Options Toggles (read-only) */}
+        <div>
+          <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+            Options
+          </label>
+          <div className="space-y-1.5">
+            {[
+              { label: '⚡ Power-ups', active: !!settings.enablePowerUps },
+              { label: '👥 Équipes', active: !!settings.enableTeams },
+              { label: '🔊 Son progressif', active: !!settings.progressiveAudio },
+            ].map(({ label, active }) => (
+              <div key={label} className="flex items-center justify-between p-2.5 rounded-xl bg-white/5">
+                <span className="text-white text-xs font-bold">{label}</span>
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${active
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-white/5 text-white/30 border border-white/5'
+                  }`}>
+                  {active ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -168,34 +210,21 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
   // Interactive settings for host
   return (
     <div className="space-y-5">
-      {/* Game Type Toggle */}
-      <div>
-        <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
-          Game Type
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => handleGameMode('blind-test')}
-            className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-              !isTimeline
-                ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-[0_0_16px_rgba(168,85,247,0.4)]'
-                : 'bg-white/5 text-white/40 hover:bg-white/10'
-            }`}
-          >
-            Blind Test
-          </button>
-          <button
-            onClick={() => handleGameMode('timeline')}
-            className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-              isTimeline
-                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-[0_0_16px_rgba(245,158,11,0.4)]'
-                : 'bg-white/5 text-white/40 hover:bg-white/10'
-            }`}
-          >
-            Timeline
-          </button>
-        </div>
-      </div>
+      {/* Game Mode Badge (read-only, chosen on homepage) */}
+      {(() => {
+        const modeInfo = GAME_MODES_INFO.find(m => m.id === gameMode);
+        return modeInfo ? (
+          <div>
+            <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+              Mode
+            </label>
+            <div className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r ${modeInfo.gradient} text-white shadow-lg`}>
+              <span>{modeInfo.icon}</span>
+              <span>{modeInfo.title}</span>
+            </div>
+          </div>
+        ) : null;
+      })()}
 
       {/* Player Mode */}
       <div>
@@ -205,21 +234,19 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => handleSoloMode(false)}
-            className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-              !settings.isSoloMode
+            className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${!settings.isSoloMode
                 ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
                 : 'bg-white/5 text-white/40 hover:bg-white/10'
-            }`}
+              }`}
           >
             Multiplayer
           </button>
           <button
             onClick={() => handleSoloMode(true)}
-            className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-              settings.isSoloMode
+            className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${settings.isSoloMode
                 ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
                 : 'bg-white/5 text-white/40 hover:bg-white/10'
-            }`}
+              }`}
           >
             Solo
           </button>
@@ -236,21 +263,49 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
             <button
               key={level}
               onClick={() => handleDifficulty(level)}
-              className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                difficulty === level
+              className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${difficulty === level
                   ? level === 'easy'
                     ? 'bg-green-500 text-black shadow-[0_0_12px_rgba(34,197,94,0.3)]'
                     : level === 'medium'
-                    ? 'bg-yellow-500 text-black shadow-[0_0_12px_rgba(234,179,8,0.3)]'
-                    : 'bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+                      ? 'bg-yellow-500 text-black shadow-[0_0_12px_rgba(234,179,8,0.3)]'
+                      : 'bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]'
                   : 'bg-white/5 text-white/40 hover:bg-white/10'
-              }`}
+                }`}
             >
               {level}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Elimination Lives (only for elimination mode) */}
+      {isElimination && (
+        <div>
+          <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+            Vies
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => handleEliminationLives(1)}
+              className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${(settings.eliminationLives ?? 3) === 1
+                  ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+                  : 'bg-white/5 text-white/40 hover:bg-white/10'
+                }`}
+            >
+              💀 Mort subite
+            </button>
+            <button
+              onClick={() => handleEliminationLives(3)}
+              className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${(settings.eliminationLives ?? 3) === 3
+                  ? 'bg-red-500 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+                  : 'bg-white/5 text-white/40 hover:bg-white/10'
+                }`}
+            >
+              ❤️❤️❤️ 3 vies
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Genre Selector (Tabbed) */}
       <div>
@@ -267,11 +322,10 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
             <button
               key={tab}
               onClick={() => setMusicTab(tab)}
-              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                musicTab === tab
+              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${musicTab === tab
                   ? 'bg-white/15 text-white'
                   : 'bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/50'
-              }`}
+                }`}
             >
               {label}
             </button>
@@ -283,11 +337,10 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
             <button
               key={g.id ?? 'random'}
               onClick={() => handleGenre(g.id)}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                settings.genre === g.id
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${settings.genre === g.id
                   ? 'bg-primary text-white shadow-[0_0_10px_rgba(168,85,247,0.3)]'
                   : 'bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60'
-              }`}
+                }`}
             >
               {g.label}
             </button>
@@ -366,6 +419,45 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
         </div>
       </div>
 
+      {/* Power-ups Toggle */}
+      <div>
+        <label className="text-white/40 text-[10px] font-bold uppercase tracking-widest mb-2 block">
+          Options
+        </label>
+        <div className="space-y-2">
+          <label className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-all">
+            <span className="text-white text-xs font-bold">Power-ups</span>
+            <input
+              type="checkbox"
+              checked={!!settings.enablePowerUps}
+              onChange={(e) => isHost && onUpdateSettings({ enablePowerUps: e.target.checked })}
+              disabled={!isHost}
+              className="accent-primary w-4 h-4"
+            />
+          </label>
+          <label className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-all">
+            <span className="text-white text-xs font-bold">Équipes</span>
+            <input
+              type="checkbox"
+              checked={!!settings.enableTeams}
+              onChange={(e) => isHost && onUpdateSettings({ enableTeams: e.target.checked })}
+              disabled={!isHost}
+              className="accent-primary w-4 h-4"
+            />
+          </label>
+          <label className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 cursor-pointer hover:bg-white/10 transition-all">
+            <span className="text-white text-xs font-bold">Son progressif</span>
+            <input
+              type="checkbox"
+              checked={!!settings.progressiveAudio}
+              onChange={(e) => isHost && onUpdateSettings({ progressiveAudio: e.target.checked })}
+              disabled={!isHost}
+              className="accent-primary w-4 h-4"
+            />
+          </label>
+        </div>
+      </div>
+
       {/* Answer Mode (hidden for Timeline) */}
       {!isTimeline && (
         <div>
@@ -381,11 +473,10 @@ export function LobbySettings({ settings, isHost, onUpdateSettings }: LobbySetti
               <button
                 key={mode}
                 onClick={() => handleAnswerMode(mode)}
-                className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
-                  answerMode === mode
+                className={`py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${answerMode === mode
                     ? 'bg-primary text-white shadow-[0_0_12px_rgba(168,85,247,0.3)]'
                     : 'bg-white/5 text-white/40 hover:bg-white/10'
-                }`}
+                  }`}
               >
                 {label}
               </button>

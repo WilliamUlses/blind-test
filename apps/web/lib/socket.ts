@@ -37,6 +37,7 @@ export function getSocket(): TypedSocket {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
+      withCredentials: true, // Send cookies for JWT auth
     });
 
   }

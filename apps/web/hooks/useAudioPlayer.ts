@@ -1,6 +1,7 @@
 /**
  * Hook pour gérer la lecture audio avec Howler.js
  * Gère le préchargement, la synchronisation et la progression
+ * Supporte le son progressif (filtre low-pass)
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -106,9 +107,10 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
 
       const howl = new Howl({
         src: [url],
-        html5: true, // Utiliser HTML5 audio pour le streaming
+        html5: true,
         preload: true,
         volume: state.volume,
+        format: ['mp3', 'aac'],
 
         onload: () => {
           const duration = howl.duration();
@@ -292,14 +294,136 @@ export function useAudioPlayer(): UseAudioPlayerReturn {
 /**
  * Hook spécialisé pour gérer la synchronisation audio dans le blind test
  * Précharge l'audio et le joue au bon moment selon le timestamp serveur
+ * Supporte le filtre low-pass pour le mode "Son progressif"
  */
-export function useSyncedAudioPlayer() {
+export function useSyncedAudioPlayer(options?: { progressiveAudio?: boolean; roundDurationMs?: number }) {
   const audioPlayer = useAudioPlayer();
   const [syncTarget, setSyncTarget] = useState<{ url: string; startTimestamp: number; offset: number } | null>(null);
   const [isSynced, setIsSynced] = useState(false);
   const playTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { isLoading, duration, error, play, playAtTime, load, unload } = audioPlayer;
+  // Progressive audio filter refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const filterNodeRef = useRef<BiquadFilterNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const filterIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const filterConnectedRef = useRef(false);
+
+  const { isLoading, duration, error, play, playAtTime, load, unload, pause, stop } = audioPlayer;
+
+  const progressiveAudio = options?.progressiveAudio ?? false;
+  const roundDurationMs = options?.roundDurationMs ?? 30000;
+
+  /**
+   * Setup progressive audio filter (low-pass sweep from 200Hz to 20kHz)
+   * Only activates when progressiveAudio is true.
+   * Uses Howler's masterGain node to insert a BiquadFilter.
+   */
+  const setupProgressiveFilter = useCallback(() => {
+    if (!progressiveAudio || filterConnectedRef.current) return;
+
+    try {
+      const ctx = Howler.ctx;
+      if (!ctx) return;
+      audioContextRef.current = ctx;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 200;
+      filter.Q.value = 1;
+      filterNodeRef.current = filter;
+
+      // Use Howler's masterGain (Web Audio API mode)
+      const howlerMasterGain = (Howler as any).masterGain;
+      if (howlerMasterGain) {
+        try {
+          howlerMasterGain.disconnect();
+          howlerMasterGain.connect(filter);
+          filter.connect(ctx.destination);
+          filterConnectedRef.current = true;
+        } catch (connectErr) {
+          // If disconnect fails, skip filter setup
+          console.warn('Could not reroute audio through filter:', connectErr);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not setup progressive audio filter:', err);
+    }
+  }, [progressiveAudio]);
+
+  /**
+   * Start sweeping the filter frequency from 200Hz to 20kHz over roundDuration
+   */
+  const startFilterSweep = useCallback(() => {
+    if (!progressiveAudio || !filterNodeRef.current) return;
+
+    const filter = filterNodeRef.current;
+    const startFreq = 200;
+    const endFreq = 20000;
+    const steps = roundDurationMs / 100; // Update every 100ms
+    let step = 0;
+
+    // Clear existing interval
+    if (filterIntervalRef.current) {
+      clearInterval(filterIntervalRef.current);
+    }
+
+    filter.frequency.value = startFreq;
+
+    filterIntervalRef.current = setInterval(() => {
+      step++;
+      // Exponential sweep sounds more natural
+      const progress = step / steps;
+      const freq = startFreq * Math.pow(endFreq / startFreq, progress);
+      filter.frequency.value = Math.min(freq, endFreq);
+
+      if (step >= steps) {
+        if (filterIntervalRef.current) {
+          clearInterval(filterIntervalRef.current);
+          filterIntervalRef.current = null;
+        }
+      }
+    }, 100);
+  }, [progressiveAudio, roundDurationMs]);
+
+  /**
+   * Reset the filter to initial state
+   */
+  const resetFilter = useCallback(() => {
+    if (filterIntervalRef.current) {
+      clearInterval(filterIntervalRef.current);
+      filterIntervalRef.current = null;
+    }
+    if (filterNodeRef.current) {
+      filterNodeRef.current.frequency.value = 200;
+    }
+  }, []);
+
+  /**
+   * Cleanup filter on unmount
+   */
+  const cleanupFilter = useCallback(() => {
+    resetFilter();
+    if (filterConnectedRef.current) {
+      try {
+        // Reconnect Howler's master gain directly to destination
+        const howlerMasterGain = (Howler as any).masterGain;
+        const ctx = audioContextRef.current;
+        if (howlerMasterGain && ctx) {
+          if (filterNodeRef.current) {
+            filterNodeRef.current.disconnect();
+          }
+          howlerMasterGain.disconnect();
+          howlerMasterGain.connect(ctx.destination);
+        }
+      } catch (err) {
+        // Ignore cleanup errors
+      }
+      filterConnectedRef.current = false;
+    }
+    filterNodeRef.current = null;
+    sourceNodeRef.current = null;
+  }, [resetFilter]);
 
   /**
    * Précharge et synchronise la lecture avec le timestamp serveur
@@ -321,16 +445,10 @@ export function useSyncedAudioPlayer() {
 
   // Effet pour gérer la synchronisation une fois l'audio chargé
   useEffect(() => {
-    // Conditions pour tenter la synchro :
-    // 1. On a une cible de synchro
-    // 2. Ce n'est pas encore synchro
-    // 3. Le chargement est terminé
-    // 4. Pas d'erreur
     if (!syncTarget || isSynced || isLoading || error) {
       return;
     }
 
-    // Sécurité : vérifier que la durée est valide
     if (duration <= 0) {
       return;
     }
@@ -340,44 +458,59 @@ export function useSyncedAudioPlayer() {
     const delay = syncTarget.startTimestamp - now;
 
     if (delay > 0) {
-      // Attendre le bon moment
       playTimeoutRef.current = setTimeout(() => {
+        // Setup progressive filter before playing
+        if (progressiveAudio) {
+          setupProgressiveFilter();
+          startFilterSweep();
+        }
         play();
         setIsSynced(true);
       }, delay);
     } else {
-      // On est en retard (ou pile à l'heure), chercher le bon moment
       const elapsed = Math.abs(delay);
-      const seekTime = elapsed / 1000; // secondes
+      const seekTime = elapsed / 1000;
 
       if (seekTime < duration) {
+        // Setup progressive filter
+        if (progressiveAudio) {
+          setupProgressiveFilter();
+          // Fast-forward the filter to match elapsed time
+          if (filterNodeRef.current) {
+            const progress = elapsed / roundDurationMs;
+            const freq = 200 * Math.pow(20000 / 200, Math.min(progress, 1));
+            filterNodeRef.current.frequency.value = freq;
+          }
+          startFilterSweep();
+        }
         playAtTime(seekTime);
         setIsSynced(true);
       } else {
-        setIsSynced(true); // Marquer comme traité même si trop tard
+        setIsSynced(true);
       }
     }
 
-    // Cleanup function du useEffect pour nettoyer le timeout si le composant démonte ou si les dépendances changent
     return () => {
       if (playTimeoutRef.current) {
         clearTimeout(playTimeoutRef.current);
         playTimeoutRef.current = null;
       }
     };
-  }, [syncTarget, isSynced, isLoading, duration, error, play, playAtTime]);
+  }, [syncTarget, isSynced, isLoading, duration, error, play, playAtTime, progressiveAudio, setupProgressiveFilter, startFilterSweep, roundDurationMs]);
 
-  // Reset sync state on unload
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (playTimeoutRef.current) clearTimeout(playTimeoutRef.current);
-    }
-  }, []);
+      cleanupFilter();
+    };
+  }, [cleanupFilter]);
 
 
   return {
     ...audioPlayer,
     loadAndSync,
     isSynced,
+    resetFilter,
   };
 }

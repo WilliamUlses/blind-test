@@ -44,9 +44,9 @@ export function useGameSocket() {
     [socket, ensureConnected]
   );
 
-  const joinRoom = useCallback((roomCode: string, pseudo: string, avatarUrl?: string) => {
+  const joinRoom = useCallback((roomCode: string, pseudo: string, avatarUrl?: string, spectator?: boolean) => {
     if (!ensureConnected()) return;
-    socket.emit('join_room', { roomCode, pseudo, avatarUrl });
+    socket.emit('join_room', { roomCode, pseudo, avatarUrl, spectator });
   }, [socket, ensureConnected]);
 
   const leaveRoom = useCallback(() => {

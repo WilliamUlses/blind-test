@@ -19,9 +19,32 @@ model User {
   pseudo    String
   avatarUrl String?
 
+  // Auth
+  email         String?  @unique
+  passwordHash  String?
+  googleId      String?  @unique
+  discordId     String?  @unique
+  avatarIndex   Int      @default(0)
+
+  // Stats (calculés côté serveur)
+  gamesPlayed        Int    @default(0)
+  gamesWon           Int    @default(0)
+  totalScore         Int    @default(0)
+  bestScore          Int    @default(0)
+  bestStreak         Int    @default(0)
+  totalResponseTimeMs Int   @default(0)
+  totalAnswers       Int    @default(0)
+  favoriteGenre      String?
+
+  // Daily
+  dailyStreak        Int    @default(0)
+  lastDailyDate      String?
+
   // Relations
-  scores    Score[]
-  rooms     RoomPlayer[]
+  scores          Score[]
+  rooms           RoomPlayer[]
+  dailyResults    DailyResult[]
+  refreshTokens   RefreshToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -170,4 +193,53 @@ model AnswerAttempt {
 
   @@index([roundId, userId])
   @@index([timestamp])
+}
+
+// ========================
+// REFRESH TOKENS
+// ========================
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+// ========================
+// DÉFI DU JOUR
+// ========================
+
+model DailyTrack {
+  id         String @id @default(cuid())
+  date       String @unique  // "YYYY-MM-DD"
+  trackId    String
+  trackTitle String
+  artistName String
+  previewUrl String
+  albumCover String
+  releaseYear Int
+  genre      String?
+  createdAt  DateTime @default(now())
+}
+
+model DailyResult {
+  id        String  @id @default(cuid())
+  userId    String
+  date      String  // "YYYY-MM-DD"
+  trackId   String
+  score     Int     @default(0)
+  completed Boolean @default(false)
+  answeredInMs Int?
+  attempts  Int     @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
 }

@@ -16,9 +16,9 @@ export function useGameActions() {
         []
     );
 
-    const joinRoom = useCallback((roomCode: string, pseudo: string, avatarUrl?: string) => {
+    const joinRoom = useCallback((roomCode: string, pseudo: string, avatarUrl?: string, spectator?: boolean) => {
         const socket = getSocket();
-        socket.emit('join_room', { roomCode, pseudo, avatarUrl });
+        socket.emit('join_room', { roomCode, pseudo, avatarUrl, spectator });
     }, []);
 
     const leaveRoom = useCallback(() => {
@@ -73,6 +73,21 @@ export function useGameActions() {
         socket.emit('send_emote', { emote });
     }, []);
 
+    const buzzerPress = useCallback(() => {
+        const socket = getSocket();
+        socket.emit('buzzer_press');
+    }, []);
+
+    const submitTimelineAnswer = useCallback((insertIndex: number) => {
+        const socket = getSocket();
+        socket.emit('submit_answer', { answer: String(insertIndex), timestamp: Date.now() });
+    }, []);
+
+    const submitLyrics = useCallback((answers: string[]) => {
+        const socket = getSocket();
+        socket.emit('submit_lyrics', { answers, timestamp: Date.now() });
+    }, []);
+
     return {
         createRoom,
         joinRoom,
@@ -86,5 +101,8 @@ export function useGameActions() {
         togglePause,
         returnToLobby,
         sendEmote,
+        buzzerPress,
+        submitTimelineAnswer,
+        submitLyrics,
     };
 }

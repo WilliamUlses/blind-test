@@ -7,7 +7,7 @@
 // GAME MODES
 // ========================
 
-export type GameMode = 'blind-test' | 'timeline';
+export type GameMode = 'blind-test' | 'timeline' | 'buzzer' | 'elimination' | 'intro' | 'lyrics';
 
 /**
  * Carte sur la frise chronologique d'un joueur (mode Timeline)
@@ -17,6 +17,38 @@ export interface TimelineCard {
   artistName: string;
   albumCover: string;
   releaseYear: number;
+}
+
+// ========================
+// POWER-UPS
+// ========================
+
+export type PowerUpType = 'x2' | 'hint' | 'steal' | 'shield';
+
+export interface PowerUp {
+  type: PowerUpType;
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export const POWER_UP_DEFINITIONS: Record<PowerUpType, PowerUp> = {
+  x2: { type: 'x2', name: 'Double', description: 'Double tes points ce round', icon: '✕2' },
+  hint: { type: 'hint', name: 'Indice', description: 'Première lettre de l\'artiste ou titre', icon: '💡' },
+  steal: { type: 'steal', name: 'Vol', description: 'Vole 200 pts au leader si tu trouves en premier', icon: '🏴‍☠️' },
+  shield: { type: 'shield', name: 'Bouclier', description: 'Pas de cooldown ce round', icon: '🛡️' },
+};
+
+// ========================
+// ÉQUIPES
+// ========================
+
+export interface Team {
+  id: string;
+  name: string;
+  color: string;
+  playerIds: string[];
+  timelineCards?: TimelineCard[]; // Frise partagée de l'équipe (mode Timeline + équipes)
 }
 
 // ========================
@@ -30,6 +62,7 @@ export interface Player {
   id: string;
   pseudo: string;
   avatarUrl: string | null;
+  userId: string | null; // Authenticated user ID (null for guests)
   isReady: boolean;
   isActive: boolean; // Connecté ou déconnecté
   score: number;     // Score cumulé de la partie
@@ -40,6 +73,18 @@ export interface Player {
   cooldownUntil: number | null; // Timestamp jusqu'auquel le joueur est en cooldown (null si pas de cooldown)
   hasVotedToPause: boolean; // A voté pour mettre en pause
   timelineCards: TimelineCard[]; // Cartes accumulées en mode Timeline
+  // Buzzer mode
+  hasBuzzed: boolean; // A buzzé ce round
+  // Elimination mode
+  isEliminated: boolean; // Éliminé de la partie
+  lives: number; // Vies restantes (elimination mode)
+  // Spectator
+  isSpectator: boolean; // Rejoint en tant que spectateur
+  // Teams
+  teamId: string | null; // ID de l'équipe (null = pas d'équipe)
+  // Power-ups
+  powerUps: PowerUpType[]; // Power-ups en stock (max 3)
+  activePowerUp: PowerUpType | null; // Power-up actif ce round
 }
 
 /**
@@ -54,6 +99,8 @@ export interface RoomState {
   currentRound: number;
   totalRounds: number;
   isPaused: boolean;
+  teams?: Team[]; // Équipes (optionnel)
+  currentTeamTurnId?: string; // ID de l'équipe active en mode Timeline+équipes (tour par tour)
 }
 
 /**
@@ -70,8 +117,14 @@ export interface GameSettings {
   wrongAnswerCooldownMs: number; // Cooldown après une mauvaise réponse (default: 2000)
   difficulty?: 'easy' | 'medium' | 'hard'; // Preset (cosmetic, actual values in other fields)
   isSoloMode?: boolean; // Solo practice mode (single player allowed)
-  gameMode: GameMode; // 'blind-test' | 'timeline'
+  gameMode: GameMode;
   timelineCardsToWin: number; // Nombre de cartes pour gagner en mode Timeline (default 10)
+  progressiveAudio?: boolean; // Son progressif (low-pass filter qui s'ouvre)
+  enablePowerUps?: boolean; // Active les power-ups
+  enableTeams?: boolean; // Active le mode équipes
+  buzzerTimeMs?: number; // Temps pour répondre après buzz (default 5000)
+  introTierMs?: number; // Durée de chaque palier en mode intro (default 2000)
+  eliminationLives?: number; // Nombre de vies en mode élimination (1 = mort subite, 3 = default)
 }
 
 /**
@@ -87,6 +140,8 @@ export interface RoundData {
   trackTitle?: string;         // Visible pendant le round en timeline
   artistName?: string;
   albumCover?: string;
+  // Intro mode
+  introTierMs?: number; // Durée de chaque palier en mode intro
 }
 
 /**
@@ -159,7 +214,8 @@ export interface ClientToServerEvents {
   join_room: (data: {
     roomCode: string;
     pseudo: string;
-    avatarUrl?: string
+    avatarUrl?: string;
+    spectator?: boolean;
   }) => void;
 
   leave_room: () => void;
@@ -191,6 +247,18 @@ export interface ClientToServerEvents {
 
   // Emotes
   send_emote: (data: { emote: string }) => void;
+
+  // Buzzer mode
+  buzzer_press: () => void;
+
+  // Power-ups
+  activate_powerup: (data: { powerUp: PowerUpType }) => void;
+
+  // Teams
+  join_team: (data: { teamId: string }) => void;
+
+  // Lyrics mode
+  submit_lyrics: (data: { answers: string[]; timestamp: number }) => void;
 }
 
 /**
@@ -278,6 +346,29 @@ export interface ServerToClientEvents {
     totalCards: number;
   }) => void;
 
+  // Buzzer mode
+  buzzer_locked: (data: { playerId: string; pseudo: string }) => void;
+  buzzer_released: () => void;
+  buzzer_timeout: () => void;
+
+  // Elimination mode
+  player_eliminated: (data: { playerId: string; pseudo: string }) => void;
+
+  // Intro mode
+  intro_tier_unlock: (data: { tier: number; durationMs: number; phase: 'listening' | 'guessing' }) => void;
+
+  // Lyrics mode
+  lyrics_data: (data: { lyricsText: string; blanks: { position: number; answer: string }[] }) => void;
+  lyrics_result: (data: { results: { correct: boolean; expected: string; given: string }[]; pointsEarned: number; correctCount: number; totalBlanks: number }) => void;
+
+  // Power-ups
+  powerup_activated: (data: { playerId: string; pseudo: string; powerUp: PowerUpType }) => void;
+  powerup_earned: (data: { playerId: string; powerUp: PowerUpType }) => void;
+  hint_received: (data: { hint: string; hintType: 'artist' | 'title' }) => void;
+
+  // Contextual reactions
+  contextual_reaction: (data: { type: 'insane' | 'fast' | 'silence' | 'comeback' | 'sweep' }) => void;
+
   // Errors
   error: (data: { code: ErrorCode; message: string }) => void;
 }
@@ -302,6 +393,7 @@ export type ErrorCode =
   | "RATE_LIMITED"
   | "PLAYER_NOT_IN_ROOM"
   | "INVALID_ROOM_CODE"
+  | "NOT_YOUR_TURN"         // Pas le tour de cette équipe (mode Timeline+équipes)
   | "SERVER_ERROR";
 
 /**
@@ -320,6 +412,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   RATE_LIMITED: "Doucement ! Réessaie dans quelques secondes.",
   PLAYER_NOT_IN_ROOM: "Tu n'es pas dans cette room.",
   INVALID_ROOM_CODE: "Code de room invalide.",
+  NOT_YOUR_TURN: "Ce n'est pas le tour de ton équipe.",
   SERVER_ERROR: "Une erreur serveur est survenue."
 };
 
@@ -382,12 +475,104 @@ export const GAME_CONSTANTS = {
   TIMELINE_CARDS_TO_WIN: 10,
   TIMELINE_MIN_YEAR: 1960,
   TIMELINE_MAX_YEAR: 2024,
+
+  // Buzzer mode
+  BUZZER_ANSWER_TIME_MS: 10_000, // 10s pour répondre après buzz
+
+  // Intro mode — cumulative listening durations (each tier plays from start to this duration)
+  INTRO_TIER_DURATIONS_MS: [2_000, 4_000, 6_000, 10_000, 20_000, 30_000] as number[],
+  INTRO_TIER_MS: 2_000, // deprecated, kept for backwards compat
+  INTRO_MAX_TIERS: 6,
+  INTRO_TIER_MULTIPLIERS: [5, 3, 2, 1.5, 1, 0.5] as number[],
+  // Guess window (time between tiers to answer)
+  INTRO_GUESS_WINDOW_MS: 15_000,
+
+  // Power-ups
+  POWERUP_STREAK_THRESHOLD: 3, // Streak de 3 pour gagner un power-up
+  POWERUP_MAX_STOCK: 3, // Max 3 power-ups en stock
+  POWERUP_STEAL_AMOUNT: 200, // Points volés avec le steal
+
+  // Premium modes
+  PREMIUM_MODES: ['intro', 'lyrics'] as string[],
+
+  // Difficulty scoring multipliers
+  DIFFICULTY_MULTIPLIERS: { easy: 0.75, medium: 1.0, hard: 1.5 } as Record<string, number>,
 } as const;
 
 /**
  * Type helper pour extraire les valeurs des constantes
  */
 export type GameConstants = typeof GAME_CONSTANTS;
+
+/**
+ * Informations sur les modes de jeu (pour l'UI)
+ */
+export interface GameModeInfo {
+  id: GameMode;
+  title: string;
+  description: string;
+  icon: string;
+  color: string;
+  gradient: string;
+  isPremium: boolean;
+}
+
+export const GAME_MODES_INFO: GameModeInfo[] = [
+  {
+    id: 'blind-test',
+    title: 'Blind Test',
+    description: 'Devine l\'artiste et le titre le plus vite possible',
+    icon: '🎵',
+    color: 'purple',
+    gradient: 'from-purple-500 to-indigo-600',
+    isPremium: false,
+  },
+  {
+    id: 'timeline',
+    title: 'Timeline',
+    description: 'Place les morceaux dans l\'ordre chronologique',
+    icon: '📅',
+    color: 'amber',
+    gradient: 'from-amber-500 to-orange-600',
+    isPremium: false,
+  },
+  {
+    id: 'buzzer',
+    title: 'Buzzer',
+    description: 'Buzze le premier pour avoir le droit de répondre',
+    icon: '🔔',
+    color: 'red',
+    gradient: 'from-red-500 to-pink-600',
+    isPremium: false,
+  },
+  {
+    id: 'elimination',
+    title: 'Élimination',
+    description: 'Le dernier à trouver est éliminé chaque round',
+    icon: '💀',
+    color: 'rose',
+    gradient: 'from-rose-500 to-red-700',
+    isPremium: false,
+  },
+  {
+    id: 'intro',
+    title: 'Intro 2s',
+    description: 'Seulement 2 secondes d\'intro, puis +2s par palier',
+    icon: '⚡',
+    color: 'cyan',
+    gradient: 'from-cyan-500 to-blue-600',
+    isPremium: true,
+  },
+  {
+    id: 'lyrics',
+    title: 'Paroles',
+    description: 'Devine le morceau à partir des paroles mot par mot',
+    icon: '📝',
+    color: 'emerald',
+    gradient: 'from-emerald-500 to-teal-600',
+    isPremium: true,
+  },
+];
 
 // ========================
 // TYPES UTILITAIRES
